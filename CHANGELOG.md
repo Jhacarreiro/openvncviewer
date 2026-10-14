@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-14
+
+### Fixed
+
+- **A session now really hangs up when it ends.** Disconnecting, a refused
+  password or a dropped link left the TCP connection to the server open until
+  Python's garbage collector got round to it, because the socket's reader
+  still held a reference when it was closed. The handle was then closed on
+  whichever thread collection happened to run on — and the disconnect path
+  closed it from a second thread as well. Windows reuses a freed handle at
+  once, so that race could crash the viewer, and once crashed the test suite
+  with an access violation. The connection is now shut down from the caller
+  and closed once, by the network thread, when the session ends.
+
+- The test suite no longer installs the real Alt+Tab keyboard hook every time
+  a test connects. A run put 128 system-wide hooks on the machine running it,
+  each holding up every keystroke there until the test thread got to it.
+
 ## [0.14.0] - 2026-10-14
 
 ### Added
@@ -586,7 +604,8 @@ First public release.
 - The remote view read its client attribute during `__init__`, before it was
   assigned, because Qt dispatches an event from `setMouseTracking`.
 
-[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/riazhassan-za/openvncviewer/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.11.0...v0.12.0

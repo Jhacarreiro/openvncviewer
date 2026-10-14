@@ -3,6 +3,7 @@
 import os
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -22,6 +23,15 @@ from openvncviewer.ui import (WHEEL_CLICK_LIMIT, WHEEL_NOTCH,  # noqa: E402
 
 REMOTE_W, REMOTE_H = 200, 120  # 5:3
 BACKGROUND = (24, 24, 24)
+
+
+def setUpModule():
+    # MainWindow installs a real, system-wide keyboard hook whenever it
+    # connects. Every keystroke on the machine running the suite would wait on
+    # it, so these tests get a stand-in; test_keyhook covers the real one.
+    patcher = mock.patch("openvncviewer.ui.KeyboardHook")
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
 
 
 class StubClient:

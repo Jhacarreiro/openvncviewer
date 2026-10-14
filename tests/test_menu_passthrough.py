@@ -9,6 +9,7 @@ passed. These go through Qt's own dispatch instead, and assert on the menu bar.
 
 import os
 import unittest
+from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -22,6 +23,15 @@ REMOTE_W, REMOTE_H = 200, 120
 # Every letter that is a top-level menu mnemonic, plus two that are not.
 MNEMONIC_KEYS = {"V": Qt.Key_V, "F": Qt.Key_F, "H": Qt.Key_H}
 PLAIN_KEYS = {"C": Qt.Key_C, "X": Qt.Key_X}
+
+
+def setUpModule():
+    # MainWindow installs a real, system-wide keyboard hook whenever it
+    # connects. Every keystroke on the machine running the suite would wait on
+    # it, so these tests get a stand-in; test_keyhook covers the real one.
+    patcher = mock.patch("openvncviewer.ui.KeyboardHook")
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
 
 
 class Stub:
