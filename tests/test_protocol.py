@@ -197,6 +197,23 @@ class FakeMacServer(threading.Thread):
             self.error = exc
             self.ready.set()
 
+    def close(self):
+        """Close every socket on the test's thread, after this one has ended.
+
+        Left to garbage collection, they close wherever collection runs. Shut
+        down first so a thread still blocked reading wakes and finishes.
+        """
+        conn = getattr(self, "conn", None)
+        if conn is not None:
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+        self.join(5)
+        for sock in (getattr(self, "reader", None), conn, self.listener):
+            if sock is not None:
+                sock.close()
+
     def read(self, count):
         data = self.reader.read(count)
         assert len(data) == count, "client closed early"
@@ -310,6 +327,7 @@ class HandshakeRaceTest(unittest.TestCase):
 
     def test_input_during_handshake_does_not_corrupt_it(self):
         server = FakeMacServer(delay=0.4)  # widen the handshake window
+        self.addCleanup(server.close)
         server.start()
 
         damaged = threading.Event()
@@ -362,33 +380,36 @@ class HostileDHServer(threading.Thread):
         self.done = threading.Event()
 
     def run(self):
+        # Every socket closed here, on this thread. Left to garbage collection,
+        # the close happens wherever collection runs - CI once crashed with an
+        # access violation inside exactly that close.
         try:
             conn, _ = self.listener.accept()
-            reader = conn.makefile("rb")
-            conn.sendall(b"RFB 003.889\n")
-            reader.read(12)
-            conn.sendall(bytes([1, 30]))
-            reader.read(1)
+            with conn, conn.makefile("rb") as reader:
+                conn.sendall(b"RFB 003.889\n")
+                reader.read(12)
+                conn.sendall(bytes([1, 30]))
+                reader.read(1)
 
-            peer = self.peer_key
-            if peer is None:
-                peer = pow(self.generator, 0x1234567, self.prime)
-            conn.sendall(struct.pack("!HH", self.generator, self.key_len)
-                         + self.prime.to_bytes(self.key_len, "big")
-                         + peer.to_bytes(self.key_len, "big"))
+                peer = self.peer_key
+                if peer is None:
+                    peer = pow(self.generator, 0x1234567, self.prime)
+                conn.sendall(struct.pack("!HH", self.generator, self.key_len)
+                             + self.prime.to_bytes(self.key_len, "big")
+                             + peer.to_bytes(self.key_len, "big"))
 
-            # Anything arriving now is the encrypted credential block. A client
-            # that validated properly sends nothing and hangs up, so a short
-            # wait is enough - and keeps the suite quick.
-            conn.settimeout(1.5)
-            try:
-                self.credentials_received = conn.recv(256)
-            except OSError:
-                pass
-            conn.close()
+                # Anything arriving now is the encrypted credential block. A
+                # client that validated properly sends nothing and hangs up, so
+                # a short wait is enough - and keeps the suite quick.
+                conn.settimeout(1.5)
+                try:
+                    self.credentials_received = conn.recv(256)
+                except OSError:
+                    pass
         except Exception:
             pass
         finally:
+            self.listener.close()
             self.done.set()
 
 
@@ -494,6 +515,23 @@ class FakeVNCServer(threading.Thread):
         self.error = None
         self.ready = threading.Event()
 
+    def close(self):
+        """Close every socket on the test's thread, after this one has ended.
+
+        Left to garbage collection, they close wherever collection runs. Shut
+        down first so a thread still blocked reading wakes and finishes.
+        """
+        conn = getattr(self, "conn", None)
+        if conn is not None:
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+        self.join(5)
+        for sock in (getattr(self, "reader", None), conn, self.listener):
+            if sock is not None:
+                sock.close()
+
     def expected_response(self, challenge):
         """Computed here independently of the client's own key derivation."""
         raw = self.password.encode("utf-8")[:8].ljust(8, b"\x00")
@@ -504,7 +542,7 @@ class FakeVNCServer(threading.Thread):
     def run(self):
         try:
             self.conn, _ = self.listener.accept()
-            reader = self.conn.makefile("rb")
+            self.reader = reader = self.conn.makefile("rb")
             self.conn.sendall(self.version)
             reader.read(12)
 
@@ -594,6 +632,7 @@ class StandardVNCTest(unittest.TestCase):
 
     def test_connects_with_a_vnc_password(self):
         server = FakeVNCServer(password="secret12")
+        self.addCleanup(server.close)
         client, failure = self.run_client(server)
         self.assertIsNone(server.error, f"server failed: {server.error!r}")
         self.assertEqual(server.chosen_type, SEC_VNC)
@@ -604,6 +643,7 @@ class StandardVNCTest(unittest.TestCase):
 
     def test_a_wrong_password_is_reported_clearly(self):
         server = FakeVNCServer(password="correct1")
+        self.addCleanup(server.close)
         _, failure = self.run_client(server, password="wrong999")
         self.assertFalse(server.response_valid)
         self.assertIsNotNone(failure)
@@ -612,12 +652,14 @@ class StandardVNCTest(unittest.TestCase):
     def test_passwords_past_eight_characters_are_ignored(self):
         """The protocol truncates; the viewer must truncate identically."""
         server = FakeVNCServer(password="12345678")
+        self.addCleanup(server.close)
         _, failure = self.run_client(server, password="12345678ignored")
         self.assertTrue(server.response_valid)
         self.assertIsNone(failure)
 
     def test_a_server_needing_no_authentication_works(self):
         server = FakeVNCServer(offer=(SEC_NONE,))
+        self.addCleanup(server.close)
         client, failure = self.run_client(server, password="")
         self.assertEqual(server.chosen_type, SEC_NONE)
         self.assertIsNone(failure)
@@ -626,6 +668,7 @@ class StandardVNCTest(unittest.TestCase):
     def test_rfb_3_3_servers_work(self):
         """3.3 dictates the security type instead of offering a list."""
         server = FakeVNCServer(password="secret12", version=b"RFB 003.003\n")
+        self.addCleanup(server.close)
         client, failure = self.run_client(server)
         self.assertIsNone(server.error, f"server failed: {server.error!r}")
         self.assertTrue(server.response_valid)
@@ -745,6 +788,7 @@ class DamageBoundsTest(unittest.TestCase):
 
     def test_reports_the_union_of_every_rect_in_the_update(self):
         server = FakeMacServer()
+        self.addCleanup(server.close)
         server.start()
 
         reported = []
@@ -784,6 +828,7 @@ class StoppedClientTest(unittest.TestCase):
         callback from the old session would tear down the new one.
         """
         server = FakeMacServer()
+        self.addCleanup(server.close)
         server.start()
 
         resized = threading.Event()
@@ -805,6 +850,7 @@ class StoppedClientTest(unittest.TestCase):
 class ProtocolTest(unittest.TestCase):
     def test_ard_auth_and_encodings(self):
         server = FakeMacServer()
+        self.addCleanup(server.close)
         server.start()
 
         damaged = threading.Event()

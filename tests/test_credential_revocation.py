@@ -10,6 +10,7 @@ credential to be gone; a failed TCP connection is not a reason to keep it.
 import os
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -20,6 +21,15 @@ from openvncviewer.history import ServerHistory  # noqa: E402
 from openvncviewer.ui import MainWindow  # noqa: E402
 
 HOST, PORT = "vnc.example", 5900
+
+
+def setUpModule():
+    # MainWindow installs a real, system-wide keyboard hook whenever it
+    # connects. Every keystroke on the machine running the suite would wait on
+    # it, so these tests get a stand-in; test_keyhook covers the real one.
+    patcher = mock.patch("openvncviewer.ui.KeyboardHook")
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
 
 
 class RevocationTest(unittest.TestCase):

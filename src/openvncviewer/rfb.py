@@ -255,8 +255,17 @@ class RFBClient:
         # started a new session that this one must not clobber.
         self._on_resize = self._on_damage = self._on_disconnect = _ignore
         self._on_clipboard = _ignore
-        if self._sock is not None:
-            self._sock.close()
+        # Shut down, never close: the network thread owns the socket and closes
+        # it on its way out. Closing here too would free the handle from two
+        # threads at once, and Windows reuses a freed handle at once - the late
+        # close can land on whatever took it next. Shutdown is safe to race, and
+        # it still wakes the read the network thread is blocked in.
+        sock = self._sock
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass  # not connected yet, or the network thread got there first
 
     def _run(self):
         reason = None
@@ -270,6 +279,11 @@ class RFBClient:
                 self.auth_failed = isinstance(exc, AuthError)
         finally:
             self._running = False
+            # The reader holds its own reference to the socket. Left to garbage
+            # collection it would close the handle on whatever thread happens
+            # to collect it, which is the race stop() is careful to avoid.
+            if self._reader is not None:
+                self._reader.close()
             if self._sock is not None:
                 self._sock.close()
             self._on_disconnect(reason)
