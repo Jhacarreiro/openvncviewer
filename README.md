@@ -282,9 +282,9 @@ Two things worth knowing:
 - **F11 is reserved by the viewer** and is therefore not forwarded to the Mac.
   It is the only key treated this way — every other key, Alt included, is
   claimed for the remote rather than left to open a menu.
-- There is **no keyboard grab**, so Windows still intercepts Alt+Tab, the
-  Windows key and Ctrl+Alt+Del even in full screen. `Cmd+Tab` on the Mac is
-  reachable only if Windows does not claim the combination first.
+- **Alt+Tab and the other Alt shortcuts go to the remote** while it has focus
+  — see [Alt shortcuts](#alt-shortcuts). The Windows key and Ctrl+Alt+Del
+  still stay with Windows, even in full screen.
 
 ## Modifier keys
 
@@ -303,6 +303,22 @@ where Alt should stay Alt.
 While connected the viewer claims every keystroke except F11, so Alt reaches
 the remote instead of opening the local menu bar. The menus remain available
 with the mouse.
+
+### Alt shortcuts
+
+**Send Alt+Tab and other Alt shortcuts to the server** is in the Options group
+and **on by default** for every server. Windows normally acts on Alt+Tab,
+Alt+Esc, Alt+Space and Alt+F4 before any window sees them; with this on, they
+go to the remote whenever it has focus. With Alt sent as Command, that makes
+Alt+Tab the Mac's app switcher and Alt+Space Spotlight.
+
+It needs a low-level keyboard hook, installed only while a session is
+connected and acting only while the remote view has focus. Typing into the
+sidebar, a dialog or another application is untouched.
+
+While it is on, Alt+Tab cannot switch away locally and Alt+F4 does not close
+the viewer: click outside the remote or use the Windows key instead. Untick it
+to give those shortcuts back to Windows. Ctrl+Alt+Del cannot be captured.
 
 ## Mouse wheel speed
 

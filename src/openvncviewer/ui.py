@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
 
 from . import __version__, secretstore
 from .history import ServerHistory
+from .keyhook import KeyboardHook
 from .rfb import RFBClient
 from .text_input import TextSender
 from .host_panel import HostListPanel
@@ -450,8 +451,8 @@ class RemoteView(QWidget):
 class ConnectDialog(QDialog):
     def __init__(self, host="", port=5900, username="",
                  wheel_speed=WHEEL_SPEED_DEFAULT, share_clipboard=True,
-                 alt_is_command=True, auto_reconnect=True, history=None,
-                 parent=None):
+                 alt_is_command=True, auto_reconnect=True,
+                 send_alt_shortcuts=True, history=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Connect to a VNC server")
         self._history = history if history is not None else ServerHistory(
@@ -493,6 +494,16 @@ class ConnectDialog(QDialog):
             "the only reachable choice: Windows keeps most Win+key\n"
             "combinations for itself.\n\n"
             "Untick for a non-Apple server, where Alt should stay Alt.")
+
+        self.send_alt_shortcuts = QCheckBox(
+            "Send Alt+Tab and other Alt shortcuts to the server")
+        self.send_alt_shortcuts.setChecked(send_alt_shortcuts)
+        self.send_alt_shortcuts.setToolTip(
+            "Alt+Tab, Alt+Esc, Alt+Space and Alt+F4 go to the remote while it\n"
+            "has focus, instead of being acted on by Windows. With Alt sent as\n"
+            "Command, that is Command+Tab and Spotlight on a Mac.\n\n"
+            "Alt+Tab then cannot switch away locally: click outside the remote,\n"
+            "or use the Windows key. Ctrl+Alt+Del always stays with Windows.")
 
         self.share_clipboard = QCheckBox("Share clipboard with this server")
         self.share_clipboard.setChecked(share_clipboard)
@@ -602,6 +613,7 @@ class ConnectDialog(QDialog):
         inner.addLayout(ends)
         inner.addWidget(self.share_clipboard)
         inner.addWidget(self.alt_is_command)
+        inner.addWidget(self.send_alt_shortcuts)
         inner.addWidget(self.auto_reconnect)
         return options
 
@@ -647,6 +659,7 @@ class ConnectDialog(QDialog):
             self.share_clipboard.setChecked(entry["share_clipboard"])
             self.alt_is_command.setChecked(entry["alt_is_command"])
             self.auto_reconnect.setChecked(entry["auto_reconnect"])
+            self.send_alt_shortcuts.setChecked(entry["send_alt_shortcuts"])
             # None means this server predates saved wheel speeds, so fall back
             # to what its connection type implies rather than to a fixed value.
             if entry["wheel_speed"] is None:
@@ -718,7 +731,8 @@ class ConnectDialog(QDialog):
                 self.save_password.isChecked(),
                 self.share_clipboard.isChecked(),
                 self.alt_is_command.isChecked(),
-                self.auto_reconnect.isChecked())
+                self.auto_reconnect.isChecked(),
+                self.send_alt_shortcuts.isChecked())
 
 
 class TextInputDialog(QDialog):
@@ -860,6 +874,9 @@ class MainWindow(QMainWindow):
         self.resize(1400, 800)  # Wider to accommodate sidebar
 
         self.client = None
+        # Takes Alt+Tab and the like from Windows while the remote has focus.
+        self._key_hook = KeyboardHook(self._remote_has_keyboard,
+                                      self._send_system_key)
         self._pending_history = None
         self.server_name = ""
         self.signals = ClientSignals()
@@ -1003,16 +1020,18 @@ class MainWindow(QMainWindow):
         if accepted:
             (host, port, username, password, wheel_speed, name,
              save_password, share_clipboard, alt_is_command,
-             auto_reconnect) = dialog.values()
+             auto_reconnect, send_alt_shortcuts) = dialog.values()
             if host:
                 self.connect_to(host, port, username, password, wheel_speed,
                                 name, save_password, share_clipboard,
-                                alt_is_command, auto_reconnect)
+                                alt_is_command, auto_reconnect,
+                                send_alt_shortcuts)
 
     def connect_to(self, host, port, username, password,
                    wheel_speed=WHEEL_SPEED_DEFAULT, server_name="",
                    save_password=False, share_clipboard=True,
-                   alt_is_command=True, auto_reconnect=False):
+                   alt_is_command=True, auto_reconnect=False,
+                   send_alt_shortcuts=True):
         # Not `disconnect`: that is the user saying stop, and it abandons the
         # retry sequence. Dialling somewhere new only ends the current session.
         self._reconnect_timer.stop()
@@ -1032,8 +1051,13 @@ class MainWindow(QMainWindow):
             "share_clipboard": share_clipboard,
             "alt_is_command": alt_is_command,
             "auto_reconnect": auto_reconnect,
+            "send_alt_shortcuts": send_alt_shortcuts,
         }
         self.view.alt_is_command = alt_is_command
+        # Removed again by _teardown, so it is never left taking keys from a
+        # window with no session behind it.
+        if send_alt_shortcuts:
+            self._key_hook.install()
         # A fresh session has seen none of our clipboard yet, so forget what we
         # told the last one and offer the current contents once it is up.
         self._clipboard_echo = None
@@ -1050,7 +1074,8 @@ class MainWindow(QMainWindow):
                                  {"wheel_speed": wheel_speed,
                                   "share_clipboard": share_clipboard,
                                   "alt_is_command": alt_is_command,
-                                  "auto_reconnect": auto_reconnect})
+                                  "auto_reconnect": auto_reconnect,
+                                  "send_alt_shortcuts": send_alt_shortcuts})
         # Revoking a saved password is not a history update and must not wait
         # for the connection to succeed. Untick the box, fail to connect, and
         # deferring this would leave the old token on disk after the user asked
@@ -1080,6 +1105,7 @@ class MainWindow(QMainWindow):
         died, and the view holds a pointer into it - without that counting as
         the user giving up.
         """
+        self._key_hook.uninstall()
         if self.client:
             self.client.stop()
             self.client = None
@@ -1088,6 +1114,20 @@ class MainWindow(QMainWindow):
         self._set_menu_mnemonics(True)
         self.server_name = ""
         self.setWindowTitle("OpenVNCViewer")
+
+    def _remote_has_keyboard(self):
+        """Whether a key typed now would go to the remote session.
+
+        Asked by the keyboard hook for every key on the machine, so the remote
+        view must have focus in the active window: a key typed into the
+        sidebar, a dialog or another application is none of ours.
+        """
+        return bool(self.client and self.isActiveWindow()
+                    and self.view.hasFocus())
+
+    def _send_system_key(self, keysym, down):
+        if self.client:
+            self.client.send_key(keysym, down)
 
     def disconnect(self):
         """The user asked to stop. Abandons any reconnect in flight."""
@@ -1237,7 +1277,8 @@ class MainWindow(QMainWindow):
             save_password=bool(password),
             share_clipboard=entry.get("share_clipboard", True),
             alt_is_command=entry.get("alt_is_command", True),
-            auto_reconnect=entry["auto_reconnect"]
+            auto_reconnect=entry["auto_reconnect"],
+            send_alt_shortcuts=entry["send_alt_shortcuts"]
         )
 
     @staticmethod
@@ -1267,6 +1308,7 @@ class MainWindow(QMainWindow):
             entry.get("share_clipboard", True),
             entry.get("alt_is_command", True),
             entry.get("auto_reconnect", True),
+            entry["send_alt_shortcuts"],
             history=self.history,
             parent=self,
         )

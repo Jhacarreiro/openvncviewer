@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-14
+
+### Added
+
+- **Alt+Tab and the other Alt shortcuts reach the remote.** Windows acts on
+  Alt+Tab, Alt+Esc, Alt+Space and Alt+F4 before any window sees them, so
+  until now they switched, minimised or closed things locally. A low-level
+  keyboard hook now sends them to the remote whenever it has focus — with
+  Alt sent as Command, Alt+Tab is the Mac's app switcher and Alt+Space is
+  Spotlight.
+
+  *Send Alt+Tab and other Alt shortcuts to the server* is in the Options
+  group, **on by default** for every connection type, and remembered per
+  server. The hook is installed only while connected and acts only while the
+  remote view has focus. While it is on, use the mouse or the Windows key to
+  leave the remote. Ctrl+Alt+Del cannot be captured.
+
 ## [0.13.0] - 2026-10-06
 
 ### Added
@@ -569,7 +586,8 @@ First public release.
 - The remote view read its client attribute during `__init__`, before it was
   assigned, because Qt dispatches an event from `setMouseTracking`.
 
-[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.10.0...v0.11.0
