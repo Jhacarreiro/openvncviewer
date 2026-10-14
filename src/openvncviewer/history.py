@@ -42,6 +42,7 @@ SESSION_DEFAULTS = {
     "share_clipboard": True,
     "alt_is_command": True,
     "auto_reconnect": True,
+    "send_alt_shortcuts": True,
 }
 # Kept in step with ui.WHEEL_SPEED_MIN/MAX. Duplicated rather than imported
 # because this module is deliberately Qt-free and stdlib-only; the test suite
@@ -68,6 +69,8 @@ def _clean_session(entry):
             entry.get("alt_is_command"), bool) else True,
         "auto_reconnect": entry.get("auto_reconnect") if isinstance(
             entry.get("auto_reconnect"), bool) else True,
+        "send_alt_shortcuts": entry.get("send_alt_shortcuts") if isinstance(
+            entry.get("send_alt_shortcuts"), bool) else True,
     }
 
 
@@ -169,7 +172,7 @@ class ServerHistory:
         any previously saved one, so unticking "Save password" forgets it.
 
         `session` carries the per-server settings in SESSION_DEFAULTS - wheel
-        speed, clipboard sharing, Alt-as-Command, auto-reconnect. Anything not
+        speed, clipboard sharing, Alt-as-Command, auto-reconnect, Alt shortcuts. Anything not
         passed keeps its default, so an older caller still works.
         """
         host = (host or "").strip()
