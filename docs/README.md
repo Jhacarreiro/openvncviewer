@@ -19,6 +19,9 @@ earlier.
 If you find something *not* listed here, please use the private channel in
 [SECURITY.md](../SECURITY.md) rather than opening a public issue.
 
+**BL-1 is fixed for the next release:** queued UI events are now bound to their
+original session, so a stopped session cannot change or disconnect its replacement.
+
 ## Status
 
 Fixed in **0.10.0**:
@@ -57,7 +60,6 @@ Still open, and tracked in [TODO.md](../TODO.md):
 | AUTH-01 / NET-4 | Medium | Security negotiation can fall back from ARD to legacy VNC after a username was supplied |
 | AUTH-02 | Medium | ARD accepts small-subgroup peer keys |
 | NET-3 | Medium | No post-connect deadlines; `stop()` does not reliably interrupt a buffered read |
-| BL-1 | Medium | Queued callbacks from a stopped session can reach its replacement |
 | BL-5 | Medium | Concurrent instances can undo history deletions through whole-file writes |
 | SC-01 / CFG-01 | Medium | Actions are referenced by mutable tags in a job holding `contents: write` |
 | SC-03 / CFG-03 | Medium | Dependencies are not hash-pinned at build time |
