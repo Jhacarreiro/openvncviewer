@@ -265,6 +265,11 @@ responsiveness. The default is 50ms. Any character can be sent, including €,
 smart quotes and non-Latin letters, as well as Enter and Tab; other control
 characters are skipped.
 
+A progress window shows how many characters have been sent. **Stop** (or
+closing that window) interrupts the operation after releasing the current key.
+Disconnecting or switching servers also cancels it. Only one text send can run
+at a time, and Windows CRLF line endings produce a single Enter.
+
 **Security note:** Manual entry does not put text on the local clipboard; the
 **From Clipboard** option reads text that is already there. Key events still
 travel over the VNC connection, so use an encrypted connection when sending

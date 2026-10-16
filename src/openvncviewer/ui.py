@@ -24,7 +24,7 @@ from PySide6.QtGui import (QAction, QColor, QImage, QKeySequence, QPainter,
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
                                QFormLayout,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-                               QMainWindow, QMessageBox, QPushButton, QSlider,
+                               QMainWindow, QMessageBox, QProgressDialog, QPushButton, QSlider,
                                QSpinBox, QVBoxLayout, QWidget, QTextEdit, QRadioButton,
                                QButtonGroup, QSplitter)
 
@@ -157,6 +157,8 @@ class RemoteView(QWidget):
         self._buttons = 0
         self._pressed = {}
         self._pending_motion = None
+        self._text_sender = None
+        self._text_progress = None
         self.wheel_speed = WHEEL_SPEED_DEFAULT
         self.alt_is_command = True
         self.setFocusPolicy(Qt.StrongFocus)
@@ -175,6 +177,7 @@ class RemoteView(QWidget):
         self._buttons = 0
 
     def detach(self):
+        self._cancel_text_input()
         self._client = None
         self._motion_timer.stop()
         self._pending_motion = None
@@ -413,6 +416,12 @@ class RemoteView(QWidget):
         """Show dialog to send text via simulated key presses (Ctrl+Shift+V)."""
         if not self._client:
             return
+        if self._text_sender is not None:
+            if self._text_progress is not None:
+                self._text_progress.show()
+                self._text_progress.raise_()
+                self._text_progress.activateWindow()
+            return
 
         # Get the window this widget belongs to for the dialog parent
         window = self.window()
@@ -423,20 +432,69 @@ class RemoteView(QWidget):
 
     def _send_text_input(self, text, delay_ms):
         """Send text to remote host by simulating key presses."""
-        if not self._client or not text:
+        if not self._client or not text or self._text_sender is not None:
             return
 
-        sender = TextSender(self._client, delay_ms=delay_ms)
-        sender.finished.connect(lambda: self._on_text_sent(sender))
-        sender.error.connect(lambda msg: self._on_text_error(msg, sender))
+        sender = self._text_sender = TextSender(self._client, delay_ms=delay_ms)
+        progress = self._text_progress = QProgressDialog(
+            "Sending text to remote...", "Stop", 0, 1, self.window())
+        progress.setWindowTitle("Send Text to Remote")
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        progress.setMinimumDuration(0)
+        progress.canceled.connect(self._stop_text_input)
+        # Keep the sender alive until its worker finishes, including after a
+        # disconnect. Explicitly queue lambdas so UI cleanup stays on Qt's thread.
+        sender.finished.connect(lambda: self._on_text_sent(sender), Qt.QueuedConnection)
+        sender.error.connect(lambda msg: self._on_text_error(msg, sender), Qt.QueuedConnection)
+        sender.progress.connect(self._on_text_progress)
+        progress.show()
         sender.send_text(text)
+
+    def _on_text_progress(self, sent, total):
+        if self.sender() is not self._text_sender or self._text_progress is None:
+            return
+        self._text_progress.setRange(0, total)
+        self._text_progress.setValue(sent)
+        self._text_progress.setLabelText(f"Sending text to remote: {sent} of {total} characters")
+
+    def _close_text_progress(self):
+        progress, self._text_progress = self._text_progress, None
+        if progress is not None:
+            progress.close()
+            progress.deleteLater()
+
+    def _cancel_text_input(self):
+        if self._text_sender is not None:
+            self._text_sender.stop()
+            self._text_sender = None
+        self._close_text_progress()
+
+    def _stop_text_input(self):
+        if self._text_sender is not None:
+            self._text_sender.stop()
+        self._close_text_progress()
+
+    def _finish_text_input(self, sender):
+        current = sender is self._text_sender
+        if current:
+            self._text_sender = None
+            self._close_text_progress()
+        sender.finished.disconnect()
+        sender.error.disconnect()
+        sender.progress.disconnect()
+        sender.deleteLater()
+        return current
 
     def _on_text_sent(self, sender):
         """Called when text sending completes."""
-        self.setFocus()
+        if self._finish_text_input(sender):
+            self.setFocus()
 
     def _on_text_error(self, error_msg, sender):
         """Called when text sending encounters an error."""
+        if not self._finish_text_input(sender):
+            return
         self.setFocus()
         # Find parent window for error dialog
         window = self.window()
