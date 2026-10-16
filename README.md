@@ -85,9 +85,12 @@ would take.
 | VNC password (type 2) | Password only, **leave Username blank** | Most non-Apple servers |
 | No authentication (type 1) | Neither | |
 
-The viewer picks the strongest scheme it can satisfy from what the server
-offers and what you filled in: ARD when you gave a username, otherwise the VNC
-password, otherwise none. RFB 3.3, 3.7 and 3.8 servers are all handled.
+Providing a username requires ARD authentication. If the server does not offer
+it, the viewer refuses rather than reusing your account password for legacy VNC
+authentication or connecting without authentication. For a standard VNC server,
+leave Username blank: the viewer prefers VNC password authentication when a
+password is supplied, otherwise no authentication. RFB 3.3, 3.7 and 3.8 servers
+are all handled.
 
 Not supported: Tight security (16), TLS/VeNCrypt (18/19), and Apple's RSA-AES
 variants (31/32/33/35). A server that *requires* one of those cannot be

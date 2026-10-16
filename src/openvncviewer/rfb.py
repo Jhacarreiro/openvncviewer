@@ -375,12 +375,18 @@ class RFBClient:
     def _choose_security(self, offered):
         """Pick the strongest scheme we can actually satisfy.
 
-        ARD carries a real account name and is preferred whenever one was
-        given. Otherwise fall back to the legacy VNC password, then to no
-        authentication at all.
+        A username means account credentials: require ARD rather than reuse
+        that password in the weaker VNC challenge-response scheme. Without a
+        username, prefer the VNC password, then no authentication.
         """
-        if SEC_ARD in offered and self.username:
-            return SEC_ARD
+        if self.username:
+            if SEC_ARD in offered:
+                return SEC_ARD
+            raise AuthError(
+                "macOS account authentication (ARD/type 30) is required when "
+                f"a username is provided (server offers {offered}). "
+                "For a standard VNC server, leave Username blank and use "
+                "its VNC password.")
         if SEC_VNC in offered and self.password:
             return SEC_VNC
         if SEC_NONE in offered:
