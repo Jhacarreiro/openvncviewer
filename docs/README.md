@@ -49,12 +49,17 @@ could drift: a repository ruleset restricts creating, moving and deleting
 `v*` tags ([tag-protection.json](../.github/tag-protection.json)), and the
 release job refuses to publish a tag whose commit is not contained in `main`.
 
+Fixed for the next release:
+
+| Finding | Severity | What changed |
+| --- | --- | --- |
+| AUTH-01 / NET-4 | Medium | Supplying a username requires ARD; legacy VNC and unauthenticated fallback are refused before a selection or credential response is sent |
+
 Still open, and tracked in [TODO.md](../TODO.md):
 
 | Finding | Severity | Summary |
 | --- | --- | --- |
 | IF-2 / BL-3 | Medium | One update can carry 65,535 DesktopSize rectangles, each causing a reallocation and a UI callback |
-| AUTH-01 / NET-4 | Medium | Security negotiation can fall back from ARD to legacy VNC after a username was supplied |
 | AUTH-02 | Medium | ARD accepts small-subgroup peer keys |
 | NET-3 | Medium | No post-connect deadlines; `stop()` does not reliably interrupt a buffered read |
 | BL-1 | Medium | Queued callbacks from a stopped session can reach its replacement |

@@ -18,9 +18,9 @@ An independent adversarial review of commit `4dbba56` is published in
 [docs/](docs/). Both High-severity findings and three others are fixed in
 0.10.0; the rest are open and indexed with their severities in
 [docs/README.md](docs/README.md), which is the authoritative status page for
-that audit. The highest open items are now **AUTH-01/NET-4** (security
-negotiation can fall back from ARD to legacy VNC after a username was given)
-and **AUTH-02** (ARD accepts small-subgroup peer keys).
+that audit. **AUTH-01/NET-4** is fixed for the next release: a username now
+requires ARD rather than falling back to legacy VNC or no authentication.
+**AUTH-02** (ARD accepts small-subgroup peer keys) remains open.
 
 - [x] **Diffie-Hellman parameters are validated** before the password is
   encrypted under a key derived from them. `rfb.py::_validate_dh_group` rejects
@@ -149,8 +149,8 @@ would have to change to widen it, not a backlog anyone has committed to.
   Tight in particular would cut bandwidth substantially on photographic content.
 - [x] **Legacy VNC password authentication (security type 2) works**, so
   non-Apple servers connect. The client picks the strongest scheme it can
-  satisfy from what the server offers and which credentials were supplied: ARD
-  when a username was given, otherwise the VNC password, otherwise none.
+  satisfy from what the server offers and which credentials were supplied: a
+  username requires ARD; without one, the VNC password is preferred, then none.
   Verified against a live non-Apple server offering types 2 and 16.
 - [ ] **Tight security (16), TLS (18) and VeNCrypt (19) are unsupported.** A
   server that merely offers one of these is fine — we pick type 2 instead — but

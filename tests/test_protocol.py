@@ -696,6 +696,73 @@ class StandardVNCTest(unittest.TestCase):
             choose([18, 19], "someone", "pw")
 
 
+class AccountAuthenticationPolicyTest(unittest.TestCase):
+    """Account credentials must never be reused for a different auth scheme."""
+
+    def refused_exchange(self, version, security_type):
+        received = bytearray()
+        errors = []
+        disconnected = threading.Event()
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            listener.settimeout(3)
+
+            def serve():
+                try:
+                    with listener.accept()[0] as conn:
+                        conn.settimeout(3)
+                        conn.sendall(version)
+                        banner = bytearray()
+                        while len(banner) < 12:
+                            data = conn.recv(12 - len(banner))
+                            if not data:
+                                return
+                            banner.extend(data)
+                        if version == b"RFB 003.003\n":
+                            conn.sendall(struct.pack("!I", security_type))
+                        else:
+                            conn.sendall(bytes((1, security_type)))
+                        if security_type == SEC_VNC:
+                            conn.sendall(b"challenge-123456")
+                        # A refusal closes without even selecting the weaker
+                        # scheme. An old client selects it or sends a response.
+                        received.extend(conn.recv(32))
+                except (ConnectionAbortedError, ConnectionResetError):
+                    pass  # Windows may reset a socket closed with unread data.
+                except Exception as exc:
+                    errors.append(exc)
+
+            server = threading.Thread(target=serve, daemon=True)
+            server.start()
+            client = RFBClient(
+                "127.0.0.1", listener.getsockname()[1], "macuser", "AccountPassword",
+                on_resize=lambda *args: None, on_damage=lambda *args: None,
+                on_disconnect=lambda reason: disconnected.set())
+            try:
+                client.start()
+                self.assertTrue(disconnected.wait(5), "client did not refuse")
+            finally:
+                client.stop()
+                server.join(5)
+                client._thread.join(5)
+            self.assertFalse(server.is_alive(), "server did not finish")
+            self.assertEqual(errors, [])
+            self.assertEqual(bytes(received), b"", "client accepted another auth scheme")
+            self.assertTrue(client.auth_failed)
+            self.assertFalse(client.was_connected)
+
+    def test_account_password_is_not_sent_to_a_vnc_only_server(self):
+        for minor in (3, 7, 8):
+            with self.subTest(version=minor):
+                self.refused_exchange(b"RFB 003.%03d\n" % minor, SEC_VNC)
+
+    def test_account_session_cannot_silently_become_unauthenticated(self):
+        for minor in (3, 7, 8):
+            with self.subTest(version=minor):
+                self.refused_exchange(b"RFB 003.%03d\n" % minor, SEC_NONE)
+
+
 class HostileStreamTest(unittest.TestCase):
     """A malicious server must not be able to spend our memory or corrupt state.
 
