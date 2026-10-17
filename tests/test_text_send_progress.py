@@ -9,7 +9,7 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtTest import QSignalSpy  # noqa: E402
+from PySide6.QtTest import QSignalSpy, QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton  # noqa: E402
 
 from openvncviewer import ui  # noqa: E402
@@ -144,18 +144,45 @@ class TextSendWindowTest(unittest.TestCase):
         self.view._send_text_input("A\n\u20ac", 5)
         sender = self.view._text_sender
         progress = self.view._text_progress
-        self.assertTrue(progress.isVisible())
+        self.assertFalse(progress.isVisible(), "shown before the send ran long")
         self.assertEqual(progress.maximum(), 3)
         self.assertEqual(progress.value(), 0)
         self.assertTrue(second_pressed.wait(2))
         self.app.processEvents()
         self.assertEqual(progress.value(), 1)
         self.assertIn("1 of 3", progress.labelText())
+        QTest.qWait(ui.TEXT_PROGRESS_DELAY_MS + 200)
+        self.assertTrue(progress.isVisible(), "a long send hid its progress")
         release_second.set()
         self.finish(sender)
         self.assertIsNone(self.view._text_sender)
         self.assertIsNone(self.view._text_progress)
         self.warning.assert_not_called()
+
+    def test_a_short_send_never_shows_its_progress_window(self):
+        shown = []
+
+        class Recording(ui.QProgressDialog):
+            def showEvent(self, event):
+                shown.append(True)
+                super().showEvent(event)
+
+        with mock.patch.object(ui, "QProgressDialog", Recording):
+            self.view._send_text_input("AB", 5)
+            self.finish(self.view._text_sender)
+            QTest.qWait(ui.TEXT_PROGRESS_DELAY_MS + 200)
+        self.assertEqual(self.client.events, [(0x41, True), (0x41, False),
+                                              (0x42, True), (0x42, False)])
+        self.assertEqual(shown, [])
+
+    def test_asking_again_during_a_send_shows_its_progress_at_once(self):
+        self.view._send_text_input("AB", 500)
+        sender = self.view._text_sender
+        self.assertTrue(self.client.pressed.wait(2))
+        self.view._prompt_text_input()
+        self.assertTrue(self.view._text_progress.isVisible())
+        self.view._text_progress.findChild(QPushButton).click()
+        self.finish(sender)
 
     def test_stop_button_interrupts_the_send_and_releases_the_current_key(self):
         self.view._send_text_input("AB", 500)

@@ -76,6 +76,30 @@ class WindowPreferencesTest(unittest.TestCase):
         self.app.processEvents()
         self.assertAlmostEqual(restored.host_panel.width(), expected_width, delta=2)
 
+    def test_a_sidebar_dragged_past_half_reopens_at_half(self):
+        window = self.window()
+        window.resize(1000, 500)
+        self.app.processEvents()
+        total = sum(window.splitter.sizes())
+        window.splitter.setSizes([int(total * 0.8), total - int(total * 0.8)])
+        window.splitter.splitterMoved.emit(int(total * 0.8), 1)
+        self.assertGreater(window._sidebar_fraction, 0.75,
+                           "dragging wider is still allowed")
+        window.close()
+
+        restored = self.window()
+        self.assertEqual(restored._sidebar_fraction,
+                         ui.SIDEBAR_MAX_RESTORED_FRACTION)
+        sizes = restored.splitter.sizes()
+        self.assertAlmostEqual(sizes[0] / sum(sizes),
+                               ui.SIDEBAR_MAX_RESTORED_FRACTION, delta=0.01)
+
+    def test_a_saved_width_under_the_cap_is_kept(self):
+        settings = QSettings(self.path, QSettings.IniFormat)
+        settings.setValue("sidebar/fraction", 0.3)
+        settings.sync()
+        self.assertEqual(self.window()._sidebar_fraction, 0.3)
+
     def test_closing_full_screen_preserves_the_previous_maximized_state(self):
         window = self.window()
         window.showMaximized()

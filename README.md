@@ -203,8 +203,9 @@ window and can be dragged wider or narrower. **«** collapses it to a narrow
 and it reopens at the width you left it.
 
 Window size and position, maximized state, sidebar width and visibility, and
-the sort order are remembered across restarts. Closing in full screen restores
-the preceding window layout next time. These interface preferences are stored
+the sort order are remembered across restarts; a sidebar left wider than half
+the window reopens at half. Closing in full screen restores the preceding
+window layout next time. These interface preferences are stored
 in `interface.ini` alongside `servers.json`; no credentials are stored there.
 
 ### Saving passwords
@@ -273,7 +274,8 @@ responsiveness. The default is 50ms. Any character can be sent, including €,
 smart quotes and non-Latin letters, as well as Enter and Tab; other control
 characters are skipped.
 
-A progress window shows how many characters have been sent. **Stop** (or
+A send that runs past half a second opens a progress window showing how many
+characters have been sent. **Stop** (or
 closing that window) interrupts the operation after releasing the current key.
 Disconnecting or switching servers also cancels it. Only one text send can run
 at a time, and Windows CRLF line endings produce a single Enter.

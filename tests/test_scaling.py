@@ -927,6 +927,25 @@ class RecentServersTest(unittest.TestCase):
         self.assertEqual(window.host_panel.width(),
                          window.host_panel.expand_btn.width())
 
+    def test_sidebar_keeps_its_share_when_the_window_grows(self):
+        """A window restored maximized is first shown at its normal size.
+
+        There the sidebar's 200px minimum can outweigh its share; maximizing
+        must not then stretch that inflated width across the screen.
+        """
+        window = self.make_window()
+        window._sidebar_fraction = 0.2
+        window.resize(500, 800)
+        window.show()
+        QApplication.processEvents()
+        self.assertEqual(window.host_panel.width(), 200)
+
+        window.resize(1600, 800)
+        QApplication.processEvents()
+        available = window.splitter.width() - window.splitter.handleWidth()
+        self.assertAlmostEqual(window.host_panel.width(), available * 0.2,
+                               delta=2)
+
     def test_sidebar_reopens_at_the_width_it_was_dragged_to(self):
         window = self.make_window()
         window.resize(1280, 800)
