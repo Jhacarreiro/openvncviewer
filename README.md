@@ -202,6 +202,11 @@ window and can be dragged wider or narrower. **«** collapses it to a narrow
 **»** button against the left edge, as does unticking **View → Show Sidebar**,
 and it reopens at the width you left it.
 
+Window size and position, maximized state, sidebar width and visibility, and
+the sort order are remembered across restarts. Closing in full screen restores
+the preceding window layout next time. These interface preferences are stored
+in `interface.ini` alongside `servers.json`; no credentials are stored there.
+
 ### Saving passwords
 
 **Save password for this server** is off by default. Tick it and the password

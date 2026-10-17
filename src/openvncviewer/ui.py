@@ -17,7 +17,7 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import (QEvent, QObject, QPoint, QRect, QRectF, QSize,
+from PySide6.QtCore import (QByteArray, QEvent, QObject, QPoint, QRect, QRectF, QSize,
                             QStandardPaths, Qt, QTimer, Signal)
 from PySide6.QtGui import (QAction, QColor, QImage, QKeySequence, QPainter,
                            QPixmap)
@@ -837,8 +837,10 @@ class TextInputDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, settings=None):
         super().__init__()
+        self._settings = settings
+        self._windowed_geometry = None
         self.setWindowTitle("OpenVNCViewer")
 
         # A splitter, so the sidebar can be dragged wider or narrower. It
@@ -941,8 +943,41 @@ class MainWindow(QMainWindow):
         # menus is only given up for as long as something else needs the key.
         self._menus = [(file_menu, "&File"), (view_menu, "&View"),
                        (help_menu, "&Help")]
-
         self.last_connection = ("", 5900, "", WHEEL_SPEED_DEFAULT)
+        self._restore_preferences()
+
+    def _restore_preferences(self):
+        if self._settings is None:
+            return
+        geometry = self._settings.value("window/geometry")
+        if isinstance(geometry, QByteArray):
+            # Qt also brings a window back onto an available screen when the
+            # monitor it used to occupy has been disconnected.
+            self.restoreGeometry(geometry)
+        try:
+            fraction = float(self._settings.value("sidebar/fraction", SIDEBAR_FRACTION))
+        except (TypeError, ValueError):
+            fraction = SIDEBAR_FRACTION
+        if 0 < fraction < 1:
+            self._sidebar_fraction = fraction
+        self.host_panel.sort_by_last_used.setChecked(
+            self._settings.value("sidebar/sort_by_last_used", False, type=bool))
+        self.host_panel.set_collapsed(
+            not self._settings.value("sidebar/visible", True, type=bool))
+
+    def _save_preferences(self):
+        if self._settings is None:
+            return
+        # Closing in full screen should restore the window that preceded it,
+        # not reopen with hidden controls or overwrite its normal geometry.
+        geometry = (self._windowed_geometry if self.isFullScreen()
+                    else self.saveGeometry())
+        self._settings.setValue("window/geometry", geometry)
+        self._settings.setValue("sidebar/fraction", self._sidebar_fraction)
+        self._settings.setValue("sidebar/visible", self.toggle_sidebar_action.isChecked())
+        self._settings.setValue("sidebar/sort_by_last_used",
+                                self.host_panel.sort_by_last_used.isChecked())
+        self._settings.sync()
 
     def _set_menu_mnemonics(self, enabled):
         """Take the menu bar out of the Alt namespace while a session is up.
@@ -968,6 +1003,7 @@ class MainWindow(QMainWindow):
         self.menuBar().setVisible(not enabled)
         self.statusBar().setVisible(not enabled)
         if enabled:
+            self._windowed_geometry = self.saveGeometry()
             self._was_maximized = self.isMaximized()
             self.showFullScreen()
         elif self._was_maximized:
@@ -1375,5 +1411,6 @@ class MainWindow(QMainWindow):
         self.host_panel.set_collapsed(not self.toggle_sidebar_action.isChecked())
 
     def closeEvent(self, event):
+        self._save_preferences()
         self.disconnect()
         super().closeEvent(event)

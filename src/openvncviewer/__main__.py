@@ -18,10 +18,11 @@
 import argparse
 import sys
 
+from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
 from . import __version__
-from .ui import WHEEL_SPEED_DEFAULT, MainWindow
+from .ui import WHEEL_SPEED_DEFAULT, MainWindow, default_history_path
 
 DEFAULT_PORT = 5900
 
@@ -44,7 +45,9 @@ def main():
     app.setApplicationName("OpenVNCViewer")
     app.setApplicationVersion(__version__)
 
-    window = MainWindow()
+    settings = QSettings(str(default_history_path().with_name("interface.ini")),
+                         QSettings.IniFormat)
+    window = MainWindow(settings=settings)
     window.last_connection = (args.host, args.port, args.user,
                               WHEEL_SPEED_DEFAULT)
     window.show()
