@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-10-17
+
+### Fixed
+
+- **A window reopened maximized no longer stretches the sidebar.** A
+  maximized window is first shown at its normal size, and the sidebar's
+  width was set there, where its 200px minimum can be far more than its
+  share; maximizing then stretched it. A sidebar left at its narrowest
+  reopened at 564px instead of 200px. The sidebar now keeps its share
+  whenever the window changes size.
+
+### Changed
+
+- **The sidebar never reopens wider than half the window.** It can still be
+  dragged wider, but a width past half is restored as half, so a launch does
+  not open with the remote squeezed into a strip.
+
+- **A short text send no longer flashes the progress window.** It now
+  appears only once a send has run for half a second, so sending a few
+  characters neither pops it up nor takes the keyboard focus. Ctrl+Shift+V
+  during a send still brings it up at once.
+
 ## [0.15.0] - 2026-10-17
 
 Everything in this release was contributed by @Jhacarreiro (#20–#23).
@@ -648,7 +670,8 @@ First public release.
 - The remote view read its client attribute during `__init__`, before it was
   assigned, because Qt dispatches an event from `setMouseTracking`.
 
-[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/riazhassan-za/openvncviewer/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/riazhassan-za/openvncviewer/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.13.0...v0.14.0
