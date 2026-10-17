@@ -6,6 +6,50 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-17
+
+Everything in this release was contributed by @Jhacarreiro (#20–#23).
+
+### Changed
+
+- **A username now requires macOS account authentication (ARD).** Until
+  now, if the server did not offer ARD, the viewer fell back to the legacy
+  VNC password or to no authentication at all. Anyone able to tamper with
+  the connection could use that to collect an offline-crackable response
+  derived from your Mac account password, or to show you a desktop of their
+  own. A username with no ARD on offer is now refused before anything is
+  sent, with a message saying what to do. **For a standard VNC server,
+  leave Username blank**; a server saved with a username will need it
+  cleared. This closes audit finding AUTH-01/NET-4 (#20).
+
+### Added
+
+- **The window and sidebar layout are remembered across restarts:** the
+  window's size, position and maximized state, the sidebar's width, whether
+  it is collapsed, and **Sort by last used**. Closing in full screen keeps
+  the layout from before it. They are kept in `interface.ini` beside
+  `servers.json`, which holds no credentials (#22).
+
+- **Sending text shows its progress and can be stopped.** Ctrl+Shift+V now
+  opens a progress window counting the characters sent. **Stop**, or closing
+  the window, ends the send at once and releases the key being held, so
+  nothing is left pressed on the remote. Disconnecting or switching servers
+  also stops it, and a second Ctrl+Shift+V during a send brings the progress
+  window back rather than starting another (#23).
+
+### Fixed
+
+- **Switching servers could cut off the new session.** An event the old
+  session had already queued — its disconnect, a resize or a clipboard
+  change — could arrive after the new one attached and act on it: tearing
+  it down, saving it to the list before it had connected, or overwriting
+  the clipboard. Events now only reach the session that sent them. This
+  closes audit finding BL-1 (#21).
+
+- **A line break in sent text typed two Enters.** Text copied on Windows
+  ends its lines with CRLF, and each half was sent as a key. It is now one
+  Enter (#23).
+
 ## [0.14.1] - 2026-10-14
 
 ### Fixed
@@ -604,7 +648,8 @@ First public release.
 - The remote view read its client attribute during `__init__`, before it was
   assigned, because Qt dispatches an event from `setMouseTracking`.
 
-[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/riazhassan-za/openvncviewer/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.12.0...v0.13.0

@@ -18,7 +18,7 @@ An independent adversarial review of commit `4dbba56` is published in
 [docs/](docs/). Both High-severity findings and three others are fixed in
 0.10.0; the rest are open and indexed with their severities in
 [docs/README.md](docs/README.md), which is the authoritative status page for
-that audit. **AUTH-01/NET-4** is fixed for the next release: a username now
+that audit. **AUTH-01/NET-4** is fixed in 0.15.0: a username now
 requires ARD rather than falling back to legacy VNC or no authentication.
 **AUTH-02** (ARD accepts small-subgroup peer keys) remains open.
 

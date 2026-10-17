@@ -19,9 +19,6 @@ earlier.
 If you find something *not* listed here, please use the private channel in
 [SECURITY.md](../SECURITY.md) rather than opening a public issue.
 
-**BL-1 is fixed for the next release:** queued UI events are now bound to their
-original session, so a stopped session cannot change or disconnect its replacement.
-
 ## Status
 
 Fixed in **0.10.0**:
@@ -52,11 +49,12 @@ could drift: a repository ruleset restricts creating, moving and deleting
 `v*` tags ([tag-protection.json](../.github/tag-protection.json)), and the
 release job refuses to publish a tag whose commit is not contained in `main`.
 
-Fixed for the next release:
+Fixed in **0.15.0**:
 
 | Finding | Severity | What changed |
 | --- | --- | --- |
 | AUTH-01 / NET-4 | Medium | Supplying a username requires ARD; legacy VNC and unauthenticated fallback are refused before a selection or credential response is sent |
+| BL-1 | Medium | Queued UI events are bound to the session that emitted them, so a stopped session cannot change or disconnect its replacement |
 
 Still open, and tracked in [TODO.md](../TODO.md):
 

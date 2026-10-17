@@ -1,14 +1,17 @@
 """Window preferences round-trip through a real INI file between windows."""
 
+import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
 
-from PySide6.QtCore import QSettings, Qt
-from PySide6.QtWidgets import QApplication, QDialog
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from openvncviewer import ui
+from PySide6.QtCore import QSettings, Qt  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
+
+from openvncviewer import ui  # noqa: E402
 
 
 class WindowPreferencesTest(unittest.TestCase):
