@@ -1,17 +1,20 @@
 """Text sends report progress, stop cleanly and stay with their own session."""
 
+import os
 import socket
 import struct
 import threading
 import unittest
 from unittest import mock
 
-from PySide6.QtTest import QSignalSpy
-from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from openvncviewer import ui
-from openvncviewer.rfb import RFBClient
-from openvncviewer.text_input import TextSender
+from PySide6.QtTest import QSignalSpy  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMainWindow, QPushButton  # noqa: E402
+
+from openvncviewer import ui  # noqa: E402
+from openvncviewer.rfb import RFBClient  # noqa: E402
+from openvncviewer.text_input import TextSender  # noqa: E402
 
 
 class RecordingClient:

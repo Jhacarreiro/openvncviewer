@@ -1,15 +1,18 @@
 """Queued network callbacks must affect only the session that emitted them."""
 
+import os
 from pathlib import Path
 import tempfile
 import threading
 import unittest
 from unittest import mock
 
-from PySide6.QtWidgets import QApplication
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from openvncviewer import ui
-from tests.test_auto_reconnect import FakeClient
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+from openvncviewer import ui  # noqa: E402
+from tests.test_auto_reconnect import FakeClient  # noqa: E402
 
 
 class EventClient(FakeClient):

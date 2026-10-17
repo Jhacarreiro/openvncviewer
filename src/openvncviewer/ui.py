@@ -17,14 +17,15 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import (QByteArray, QEvent, QObject, QPoint, QRect, QRectF, QSize,
-                            QStandardPaths, Qt, QTimer, Signal)
+from PySide6.QtCore import (QByteArray, QEvent, QObject, QPoint, QRect,
+                            QRectF, QSize, QStandardPaths, Qt, QTimer, Signal)
 from PySide6.QtGui import (QAction, QColor, QImage, QKeySequence, QPainter,
                            QPixmap)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
                                QFormLayout,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-                               QMainWindow, QMessageBox, QProgressDialog, QPushButton, QSlider,
+                               QMainWindow, QMessageBox, QProgressDialog,
+                               QPushButton, QSlider,
                                QSpinBox, QVBoxLayout, QWidget, QTextEdit, QRadioButton,
                                QButtonGroup, QSplitter)
 
