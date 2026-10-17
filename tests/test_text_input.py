@@ -86,7 +86,6 @@ class TestTextSenderInit(unittest.TestCase):
 
         self.assertEqual(sender._client, mock_client)
         self.assertEqual(sender._delay_ms, TextSender.DEFAULT_DELAY_MS)
-        self.assertFalse(sender._stop_flag)
         self.assertIsNone(sender._thread)
 
     def test_init_custom_delay(self):

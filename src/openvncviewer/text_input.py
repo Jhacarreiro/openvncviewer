@@ -16,9 +16,8 @@
 """Text insertion via simulated key presses for remote input."""
 
 import threading
-import time
 
-from PySide6.QtCore import Qt, QTimer, Signal, QObject
+from PySide6.QtCore import Signal, QObject
 
 
 class TextSender(QObject):
@@ -30,6 +29,7 @@ class TextSender(QObject):
 
     finished = Signal()
     error = Signal(str)
+    progress = Signal(int, int)
 
     # Delay between key presses in milliseconds to avoid overwhelming the server
     DEFAULT_DELAY_MS = 50
@@ -45,7 +45,7 @@ class TextSender(QObject):
         self._client = client
         self._delay_ms = delay_ms
         self._thread = None
-        self._stop_flag = False
+        self._stop_event = threading.Event()
 
     def send_text(self, text):
         """Send text by simulating key presses.
@@ -57,34 +57,44 @@ class TextSender(QObject):
             self.error.emit("No active connection")
             return
 
-        if not text:
+        # Windows clipboard line endings represent one Enter, not two.
+        self._stop_event.clear()
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        total = sum(self._char_to_keysym(char) is not None for char in text)
+        self.progress.emit(0, total)
+        if not total:
             self.finished.emit()
             return
 
         # Run in background thread to avoid blocking UI
-        self._stop_flag = False
         self._thread = threading.Thread(
             target=self._send_text_thread,
-            args=(text,),
+            args=(text, total),
             daemon=True
         )
         self._thread.start()
 
-    def _send_text_thread(self, text):
+    def _send_text_thread(self, text, total):
         """Worker thread: send each character as a key press."""
         try:
+            sent = 0
             for char in text:
-                if self._stop_flag:
+                if self._stop_event.is_set():
                     break
 
                 keysym = self._char_to_keysym(char)
                 if keysym is not None:
-                    # Press the key
                     self._client.send_key(keysym, True)
-                    time.sleep(self._delay_ms / 1000.0)
-                    # Release the key
-                    self._client.send_key(keysym, False)
-                    time.sleep(self._delay_ms / 1000.0)
+                    try:
+                        self._stop_event.wait(self._delay_ms / 1000.0)
+                    finally:
+                        # Cancellation during the delay must still release
+                        # the current key before any completion is reported.
+                        self._client.send_key(keysym, False)
+                    sent += 1
+                    self.progress.emit(sent, total)
+                    if self._stop_event.wait(self._delay_ms / 1000.0):
+                        break
 
             self.finished.emit()
         except Exception as e:
@@ -126,6 +136,4 @@ class TextSender(QObject):
 
     def stop(self):
         """Stop sending text if currently in progress."""
-        self._stop_flag = True
-        if self._thread:
-            self._thread.join(timeout=1.0)
+        self._stop_event.set()
