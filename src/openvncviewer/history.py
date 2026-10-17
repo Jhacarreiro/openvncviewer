@@ -43,7 +43,11 @@ SESSION_DEFAULTS = {
     "alt_is_command": True,
     "auto_reconnect": True,
     "send_alt_shortcuts": True,
+    "picture_quality": "high",
 }
+# The connect dialog's picture-quality choices. Kept here so a value read from
+# the file can be checked without this module importing the UI.
+PICTURE_QUALITIES = ("lossless", "high", "medium", "low")
 # Kept in step with ui.WHEEL_SPEED_MIN/MAX. Duplicated rather than imported
 # because this module is deliberately Qt-free and stdlib-only; the test suite
 # pins the two together.
@@ -71,6 +75,8 @@ def _clean_session(entry):
             entry.get("auto_reconnect"), bool) else True,
         "send_alt_shortcuts": entry.get("send_alt_shortcuts") if isinstance(
             entry.get("send_alt_shortcuts"), bool) else True,
+        "picture_quality": entry.get("picture_quality")
+        if entry.get("picture_quality") in PICTURE_QUALITIES else "high",
     }
 
 
@@ -172,8 +178,9 @@ class ServerHistory:
         any previously saved one, so unticking "Save password" forgets it.
 
         `session` carries the per-server settings in SESSION_DEFAULTS - wheel
-        speed, clipboard sharing, Alt-as-Command, auto-reconnect, Alt shortcuts. Anything not
-        passed keeps its default, so an older caller still works.
+        speed, clipboard sharing, Alt-as-Command, auto-reconnect, Alt shortcuts,
+        picture quality. Anything not passed keeps its default, so an older
+        caller still works.
         """
         host = (host or "").strip()
         if not host:

@@ -17,10 +17,11 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import (QByteArray, QEvent, QObject, QPoint, QRect,
-                            QRectF, QSize, QStandardPaths, Qt, QTimer, Signal)
-from PySide6.QtGui import (QAction, QColor, QImage, QKeySequence, QPainter,
-                           QPixmap)
+from PySide6.QtCore import (QBuffer, QByteArray, QEvent, QIODevice, QObject,
+                            QPoint, QRect, QRectF, QSize, QStandardPaths, Qt,
+                            QTimer, Signal)
+from PySide6.QtGui import (QAction, QColor, QImage, QImageReader, QKeySequence,
+                           QPainter, QPixmap)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
                                QFormLayout,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit,
@@ -30,9 +31,9 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
                                QButtonGroup, QSplitter)
 
 from . import __version__, secretstore
-from .history import ServerHistory
+from .history import PICTURE_QUALITIES, ServerHistory
 from .keyhook import KeyboardHook
-from .rfb import RFBClient
+from .rfb import RFBClient, RFBError
 from .text_input import TextSender
 from .host_panel import HostListPanel
 
@@ -53,6 +54,27 @@ def default_history_path():
     """Where the recent-servers list lives, per platform conventions."""
     root = QStandardPaths.writableLocation(QStandardPaths.AppConfigLocation)
     return Path(root or ".") / "servers.json"
+
+
+def decode_jpeg(data, width, height):
+    """A Tight JPEG rectangle as width*height BGRX pixels, for RFBClient.
+
+    Runs on the network thread, where QImage is safe to use (QPixmap is not).
+    """
+    buffer = QBuffer()
+    buffer.setData(QByteArray(data))
+    buffer.open(QIODevice.ReadOnly)
+    reader = QImageReader(buffer, b"jpeg")
+    # The header alone gives the size, so a JPEG that does not match its
+    # rectangle is refused before any of it is decoded.
+    size = reader.size()
+    if size != QSize(width, height):
+        raise RFBError(f"Tight JPEG is {size.width()}x{size.height()}, not the "
+                       f"{width}x{height} rectangle it was sent for")
+    image = reader.read()
+    if image.isNull():
+        raise RFBError(f"undecodable Tight JPEG ({reader.errorString()})")
+    return bytes(image.convertToFormat(QImage.Format_RGB32).constBits())
 
 
 # Qt key -> X11 keysym. Meta maps to Super_L, which macOS treats as Command.
@@ -78,6 +100,11 @@ SIDEBAR_MAX_RESTORED_FRACTION = 0.5
 # A text send that finishes sooner than this never shows its progress
 # window, so a short one neither flashes it up nor takes the focus.
 TEXT_PROGRESS_DELAY_MS = 500
+
+# What each picture-quality choice asks a Tight server for: None is lossless,
+# a number is a JPEG quality from 0 to 9. The keys are history's choices.
+JPEG_QUALITY = {"lossless": None, "high": 8, "medium": 6, "low": 3}
+assert set(JPEG_QUALITY) == set(PICTURE_QUALITIES)
 
 # One notch of a standard mouse wheel, in eighths of a degree (Qt's unit).
 WHEEL_NOTCH = 120
@@ -517,7 +544,8 @@ class ConnectDialog(QDialog):
     def __init__(self, host="", port=5900, username="",
                  wheel_speed=WHEEL_SPEED_DEFAULT, share_clipboard=True,
                  alt_is_command=True, auto_reconnect=True,
-                 send_alt_shortcuts=True, history=None, parent=None):
+                 send_alt_shortcuts=True, picture_quality="high",
+                 history=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Connect to a VNC server")
         self._history = history if history is not None else ServerHistory(
@@ -578,6 +606,19 @@ class ConnectDialog(QDialog):
             "and RFB\ncarries it in the clear. Untick this when that matters."
             "\n\nmacOS Screen Sharing does not carry the clipboard over RFB, "
             "so this\nhas no effect when connected to a Mac.")
+
+        self.picture_quality = QComboBox()
+        for label, key in (("Lossless", "lossless"), ("High", "high"),
+                           ("Medium", "medium"), ("Low", "low")):
+            self.picture_quality.addItem(label, key)
+        self.picture_quality.setCurrentIndex(
+            self.picture_quality.findData(picture_quality))
+        self.picture_quality.setToolTip(
+            "How a server with Tight encoding, such as TightVNC, sends photos\n"
+            "and video. High, Medium and Low send them as JPEG: far less data,\n"
+            "so video keeps up over Wi-Fi, while text and windows stay exact.\n"
+            "Lossless sends every pixel exactly.\n\n"
+            "A server without Tight ignores this and stays lossless.")
 
         self.auto_reconnect = QCheckBox("Reconnect automatically if the link drops")
         self.auto_reconnect.setChecked(auto_reconnect)
@@ -676,6 +717,11 @@ class ConnectDialog(QDialog):
         inner.addWidget(QLabel("Mouse wheel speed"))
         inner.addWidget(self.wheel_speed)
         inner.addLayout(ends)
+        quality = QHBoxLayout()
+        quality.addWidget(QLabel("Picture quality"))
+        quality.addWidget(self.picture_quality)
+        quality.addStretch()
+        inner.addLayout(quality)
         inner.addWidget(self.share_clipboard)
         inner.addWidget(self.alt_is_command)
         inner.addWidget(self.send_alt_shortcuts)
@@ -725,6 +771,8 @@ class ConnectDialog(QDialog):
             self.alt_is_command.setChecked(entry["alt_is_command"])
             self.auto_reconnect.setChecked(entry["auto_reconnect"])
             self.send_alt_shortcuts.setChecked(entry["send_alt_shortcuts"])
+            self.picture_quality.setCurrentIndex(
+                self.picture_quality.findData(entry["picture_quality"]))
             # None means this server predates saved wheel speeds, so fall back
             # to what its connection type implies rather than to a fixed value.
             if entry["wheel_speed"] is None:
@@ -797,7 +845,8 @@ class ConnectDialog(QDialog):
                 self.share_clipboard.isChecked(),
                 self.alt_is_command.isChecked(),
                 self.auto_reconnect.isChecked(),
-                self.send_alt_shortcuts.isChecked())
+                self.send_alt_shortcuts.isChecked(),
+                self.picture_quality.currentData())
 
 
 class TextInputDialog(QDialog):
@@ -1120,18 +1169,19 @@ class MainWindow(QMainWindow):
         if accepted:
             (host, port, username, password, wheel_speed, name,
              save_password, share_clipboard, alt_is_command,
-             auto_reconnect, send_alt_shortcuts) = dialog.values()
+             auto_reconnect, send_alt_shortcuts,
+             picture_quality) = dialog.values()
             if host:
                 self.connect_to(host, port, username, password, wheel_speed,
                                 name, save_password, share_clipboard,
                                 alt_is_command, auto_reconnect,
-                                send_alt_shortcuts)
+                                send_alt_shortcuts, picture_quality)
 
     def connect_to(self, host, port, username, password,
                    wheel_speed=WHEEL_SPEED_DEFAULT, server_name="",
                    save_password=False, share_clipboard=True,
                    alt_is_command=True, auto_reconnect=False,
-                   send_alt_shortcuts=True):
+                   send_alt_shortcuts=True, picture_quality="high"):
         # Not `disconnect`: that is the user saying stop, and it abandons the
         # retry sequence. Dialling somewhere new only ends the current session.
         self._reconnect_timer.stop()
@@ -1152,6 +1202,7 @@ class MainWindow(QMainWindow):
             "alt_is_command": alt_is_command,
             "auto_reconnect": auto_reconnect,
             "send_alt_shortcuts": send_alt_shortcuts,
+            "picture_quality": picture_quality,
         }
         self.view.alt_is_command = alt_is_command
         # Removed again by _teardown, so it is never left taking keys from a
@@ -1175,7 +1226,8 @@ class MainWindow(QMainWindow):
                                   "share_clipboard": share_clipboard,
                                   "alt_is_command": alt_is_command,
                                   "auto_reconnect": auto_reconnect,
-                                  "send_alt_shortcuts": send_alt_shortcuts})
+                                  "send_alt_shortcuts": send_alt_shortcuts,
+                                  "picture_quality": picture_quality})
         # Revoking a saved password is not a history update and must not wait
         # for the connection to succeed. Untick the box, fail to connect, and
         # deferring this would leave the old token on disk after the user asked
@@ -1185,6 +1237,10 @@ class MainWindow(QMainWindow):
             self.history.forget_password(host)
         self.server_name = server_name
         self.status.setText(f"Connecting to {host}:{port}...")
+        jpeg_quality = JPEG_QUALITY[picture_quality]
+        # A build missing Qt's JPEG plugin must not ask for what it cannot show.
+        if b"jpeg" not in [bytes(f) for f in QImageReader.supportedImageFormats()]:
+            jpeg_quality = None
         token = self._client_token = object()
         self.client = RFBClient(
             host, port, username, password,
@@ -1192,6 +1248,7 @@ class MainWindow(QMainWindow):
             on_damage=lambda *bounds: self.signals.damaged.emit(token, *bounds),
             on_disconnect=lambda reason: self.signals.disconnected.emit(token, reason),
             on_clipboard=lambda text: self.signals.clipboard.emit(token, text),
+            jpeg_quality=jpeg_quality, decode_jpeg=decode_jpeg,
         )
         self.view.attach(self.client)
         self._set_menu_mnemonics(False)
@@ -1398,7 +1455,8 @@ class MainWindow(QMainWindow):
             share_clipboard=entry.get("share_clipboard", True),
             alt_is_command=entry.get("alt_is_command", True),
             auto_reconnect=entry["auto_reconnect"],
-            send_alt_shortcuts=entry["send_alt_shortcuts"]
+            send_alt_shortcuts=entry["send_alt_shortcuts"],
+            picture_quality=entry["picture_quality"]
         )
 
     @staticmethod
@@ -1429,6 +1487,7 @@ class MainWindow(QMainWindow):
             entry.get("alt_is_command", True),
             entry.get("auto_reconnect", True),
             entry["send_alt_shortcuts"],
+            entry["picture_quality"],
             history=self.history,
             parent=self,
         )

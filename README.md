@@ -413,6 +413,27 @@ Three limits are deliberate:
 Like the other session options this is stored per server, so a flaky laptop
 can have it on while a server you would rather be told about has it off.
 
+## Picture quality
+
+**Picture quality** in the Options group sets how a server with Tight
+encoding, such as TightVNC, sends photos and video:
+
+| Setting | What the server is asked for |
+| --- | --- |
+| Lossless | ZRLE, exactly as before Tight was supported |
+| High (default) | Tight, JPEG quality 8 |
+| Medium | Tight, JPEG quality 6 |
+| Low | Tight, JPEG quality 3 |
+
+Lossless ZRLE sends a full-screen video frame as several megabytes, which
+Wi-Fi cannot keep up with; as JPEG the same frame is a small fraction of that.
+The server only uses JPEG where the picture is photographic, so text and
+window edges stay exact on every setting.
+
+A server without Tight — including macOS Screen Sharing, as far as is known —
+ignores the setting and stays on ZRLE. Like the other options it is stored per
+server.
+
 ## How the macOS login works
 
 macOS announces itself as `RFB 003.889`; the client replies `RFB 003.008` and
@@ -457,8 +478,11 @@ the client to hang up without sending the credential block.
 
 ## Encodings
 
-Raw, CopyRect and ZRLE (all five tile subencodings), plus the DesktopSize
-pseudo-encoding so a resolution change on the Mac reallocates the framebuffer.
+Raw, CopyRect, ZRLE (all five tile subencodings) and Tight (fill, copy,
+palette, gradient and JPEG), plus the DesktopSize pseudo-encoding so a
+resolution change on the Mac reallocates the framebuffer. Tight is only asked
+for when [picture quality](#picture-quality) is not Lossless; its JPEG is
+decoded by Qt.
 
 Pixels are negotiated as 32bpp little-endian BGRX, which is byte-identical to
 `QImage.Format_RGB32`, so the framebuffer `bytearray` is wrapped by QImage
@@ -547,7 +571,7 @@ take.
 
 ## Known limitations
 
-See **[TODO.md](TODO.md)**. The short version: no Tight/Hextile encodings,
+See **[TODO.md](TODO.md)**. The short version: no Hextile encoding,
 clipboard sharing does not work against macOS (see above), ZRLE decoding is
 pure Python and is the performance bottleneck, and the security caveats above.
 

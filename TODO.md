@@ -144,9 +144,10 @@ would have to change to widen it, not a backlog anyone has committed to.
 
 ## 3. Protocol coverage
 
-- [ ] **Encodings are limited to Raw, CopyRect and ZRLE**, plus the DesktopSize
-  pseudo-encoding. Tight, Hextile, RRE, CoRRE and zlib are not implemented.
-  Tight in particular would cut bandwidth substantially on photographic content.
+- [x] **Tight encoding works**, JPEG included, chosen by the per-server
+  picture quality (0.16.0). Encodings are Raw, CopyRect, ZRLE and Tight, plus
+  the DesktopSize pseudo-encoding.
+- [ ] Hextile, RRE, CoRRE and zlib are not implemented.
 - [x] **Legacy VNC password authentication (security type 2) works**, so
   non-Apple servers connect. The client picks the strongest scheme it can
   satisfy from what the server offers and which credentials were supplied: a
@@ -156,8 +157,8 @@ would have to change to widen it, not a backlog anyone has committed to.
   server that merely offers one of these is fine — we pick type 2 instead — but
   one that *requires* it cannot be connected to. VeNCrypt in particular would
   bring transport encryption to non-Apple servers.
-- [ ] Only the security type of Tight is missing; the **Tight encoding** is a
-  separate item above and would cut bandwidth on photographic content.
+- [ ] Only the security type of Tight is missing; the **Tight encoding** is
+  supported (see above).
 - [x] **Clipboard synchronisation works in both directions**, on by default,
   with a per-session tick in the connect dialog. Windows CRLF is converted to
   the bare LF the protocol requires and back.
