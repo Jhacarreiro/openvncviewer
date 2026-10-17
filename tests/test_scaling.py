@@ -541,7 +541,8 @@ class RecentServersTest(unittest.TestCase):
         dialog = self.dialog("192.168.0.8")
         dialog.password.setText("secret")
         (host, port, username, password, wheel, name, save,
-         clipboard, alt_cmd, reconnect, alt_shortcuts) = dialog.values()
+         clipboard, alt_cmd, reconnect, alt_shortcuts,
+         quality) = dialog.values()
         self.assertEqual((host, port, username, password, name),
                          ("192.168.0.8", 5900, "someone", "secret", "Studio Mac"))
         self.assertFalse(save, "nothing was saved for this server")
@@ -784,7 +785,7 @@ class RecentServersTest(unittest.TestCase):
         self.assertEqual(len(created), 1)
         args, kwargs = created[0]
         self.assertEqual(args, ("panel.example", 5901, "amy", 5,
-                                False, False, False, True))
+                                False, False, False, True, "high"))
         self.assertIs(kwargs["history"], self.history)
         self.assertIs(kwargs["parent"], window)
 
@@ -1056,7 +1057,7 @@ class ConnectDialogTest(unittest.TestCase):
         self.assertEqual(
             dialog.values(),
             ("mac.local", 5901, "someone", "secret", 7, "Studio", False,
-             True, True, True, True))
+             True, True, True, True, "high"))
 
 
 if __name__ == "__main__":

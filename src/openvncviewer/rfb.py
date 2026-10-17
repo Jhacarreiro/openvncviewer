@@ -35,8 +35,22 @@ SEC_ARD = 30
 
 ENC_RAW = 0
 ENC_COPYRECT = 1
+ENC_TIGHT = 7
 ENC_ZRLE = 16
 ENC_DESKTOP_SIZE = -223
+# Pseudo-encodings -32 to -23 ask a Tight server for JPEG at quality 0 to 9.
+# Without one it never sends JPEG, only Tight's lossless forms.
+ENC_JPEG_QUALITY_0 = -32
+
+# Tight compression types (the control byte's high nibble) and filters.
+TIGHT_FILL = 0x8
+TIGHT_JPEG = 0x9
+TIGHT_EXPLICIT_FILTER = 0x4
+TIGHT_FILTER_COPY = 0
+TIGHT_FILTER_PALETTE = 1
+TIGHT_FILTER_GRADIENT = 2
+# Tight sends anything shorter than this as it is, without zlib or a length.
+TIGHT_MIN_TO_COMPRESS = 12
 
 BYTES_PER_PIXEL = 4
 
@@ -210,11 +224,18 @@ class RFBClient:
     """
 
     def __init__(self, host, port, username, password,
-                 on_resize, on_damage, on_disconnect, on_clipboard=None):
+                 on_resize, on_damage, on_disconnect, on_clipboard=None,
+                 jpeg_quality=None, decode_jpeg=None):
+        """`jpeg_quality` (0-9) asks for Tight with JPEG; None keeps updates
+        lossless. `decode_jpeg(data, w, h)` returns w*h BGRX pixels - it is
+        passed in because this module does not use Qt, and Qt does the JPEG.
+        """
         self.host = host
         self.port = port
         self.username = username
         self.password = password
+        self.jpeg_quality = jpeg_quality if decode_jpeg is not None else None
+        self._decode_jpeg = decode_jpeg
         self._on_resize = on_resize
         self._on_damage = on_damage
         self._on_disconnect = on_disconnect
@@ -236,6 +257,8 @@ class RFBClient:
         self._reader = None
         self._send_lock = threading.Lock()
         self._zrle = zlib.decompressobj()
+        # Tight keeps four zlib streams, each reset when the server says so.
+        self._tight_zlib = [zlib.decompressobj() for _ in range(4)]
         self._running = False
         self._ready = False
         self._thread = None
@@ -466,6 +489,11 @@ class RFBClient:
 
     def _set_encodings(self):
         encodings = [ENC_ZRLE, ENC_COPYRECT, ENC_RAW, ENC_DESKTOP_SIZE]
+        if self.jpeg_quality is not None:
+            # First, so a server that has it prefers it. One without Tight
+            # skips both and carries on with ZRLE.
+            encodings = ([ENC_TIGHT] + encodings
+                         + [ENC_JPEG_QUALITY_0 + self.jpeg_quality])
         self._send(struct.pack("!B x H", 2, len(encodings))
                    + b"".join(struct.pack("!i", e) for e in encodings))
 
@@ -532,6 +560,8 @@ class RFBClient:
                         f"server declared a {length}-byte compressed rectangle; "
                         f"refusing to read past {MAX_COMPRESSED_BYTES}")
                 self._decode_zrle(x, y, w, h, self._read(length))
+            elif encoding == ENC_TIGHT and self.jpeg_quality is not None:
+                self._decode_tight(x, y, w, h)
             elif encoding == ENC_DESKTOP_SIZE:
                 self._resize(w, h)
                 resized = True
@@ -613,6 +643,83 @@ class RFBClient:
         for row, data in enumerate(rows):
             start = (y + row) * stride + x * BYTES_PER_PIXEL
             fb[start:start + row_len] = data
+
+    # ----------------------------------------------------------------- Tight
+
+    def _decode_tight(self, x, y, w, h):
+        """One Tight rectangle. Unlike ZRLE it has no overall length up front,
+        so each part is read as its own header announces it."""
+        control = self._read(1)[0]
+        for stream in range(4):
+            if control & (1 << stream):
+                self._tight_zlib[stream] = zlib.decompressobj()
+        kind = control >> 4
+
+        if kind == TIGHT_FILL:
+            r, g, b = self._read(3)
+            self._blit(x, y, w, h, bytes((b, g, r, 0xFF)) * (w * h))
+            return
+        if kind == TIGHT_JPEG:
+            data = self._read(self._read_compact_length())
+            self._blit(x, y, w, h, self._decode_jpeg(data, w, h))
+            return
+        if kind > TIGHT_JPEG:
+            raise RFBError(f"invalid Tight compression type {kind:#x}")
+
+        stream = kind & 0x3
+        filter_id = (self._read(1)[0] if kind & TIGHT_EXPLICIT_FILTER
+                     else TIGHT_FILTER_COPY)
+        count = w * h
+        if filter_id == TIGHT_FILTER_COPY:
+            pixels = _rgb_to_bgrx(self._tight_data(stream, count * 3), count)
+        elif filter_id == TIGHT_FILTER_PALETTE:
+            colours = self._read(1)[0] + 1
+            if colours < 2:
+                raise RFBError("Tight palette with fewer than two colours")
+            palette = self._read(colours * 3)
+            if colours == 2:
+                row = (w + 7) // 8
+                indices = _unpack_bitmap(self._tight_data(stream, row * h), w, h)
+            else:
+                indices = self._tight_data(stream, count)
+            pixels = _expand_palette(indices, palette, colours)
+        elif filter_id == TIGHT_FILTER_GRADIENT:
+            pixels = _undo_gradient(self._tight_data(stream, count * 3), w, h)
+        else:
+            raise RFBError(f"invalid Tight filter {filter_id}")
+        self._blit(x, y, w, h, pixels)
+
+    def _tight_data(self, stream, size):
+        """Exactly `size` bytes of a Tight rectangle's pixel data."""
+        if size < TIGHT_MIN_TO_COMPRESS:
+            return self._read(size)
+        data = self._read(self._read_compact_length())
+        inflater = self._tight_zlib[stream]
+        try:
+            # Capped at what the rectangle can hold: anything that would
+            # expand further is a compression bomb, not pixels.
+            raw = inflater.decompress(data, size)
+        except zlib.error as exc:
+            raise RFBError(f"malformed Tight zlib data ({exc})") from exc
+        if inflater.unconsumed_tail:
+            raise RFBError(f"Tight data for a {size}-byte rectangle expanded "
+                           "past it; refusing to keep decompressing")
+        if len(raw) != size:
+            raise RFBError(f"Tight data for a {size}-byte rectangle expanded "
+                           f"to only {len(raw)} bytes")
+        return raw
+
+    def _read_compact_length(self):
+        """Tight's 1-3 byte length, 7 bits a byte. At most 4MB, so it needs
+        no further bound of its own."""
+        byte = self._read(1)[0]
+        length = byte & 0x7F
+        if byte & 0x80:
+            byte = self._read(1)[0]
+            length |= (byte & 0x7F) << 7
+            if byte & 0x80:
+                length |= self._read(1)[0] << 14
+        return length
 
     # ------------------------------------------------------------------ ZRLE
 
@@ -870,6 +977,63 @@ def _expand_cpixels(data, count):
     out[1::4] = data[1::3]
     out[2::4] = data[2::3]
     out[3::4] = b"\xff" * count
+    return out
+
+
+def _rgb_to_bgrx(data, count):
+    """Tight sends pixels as R, G, B - the reverse of ZRLE's byte order."""
+    out = bytearray(count * 4)
+    out[0::4] = data[2::3]
+    out[1::4] = data[1::3]
+    out[2::4] = data[0::3]
+    out[3::4] = b"\xff" * count
+    return out
+
+
+# One byte of a 2-colour Tight bitmap as indices, most significant bit first.
+_BITS = [bytes((byte >> (7 - bit)) & 1 for bit in range(8)) for byte in range(256)]
+
+
+def _unpack_bitmap(data, w, h):
+    """Expand a 1-bit-per-pixel bitmap to an index byte per pixel. Each row
+    is padded to a whole byte, so the padding is dropped row by row."""
+    row = (w + 7) // 8
+    return b"".join(
+        b"".join(map(_BITS.__getitem__, data[y * row:(y + 1) * row]))[:w]
+        for y in range(h))
+
+
+def _expand_palette(indices, palette, colours):
+    """Map palette indices to BGRX a channel at a time, with C-speed translate."""
+    if indices and max(indices) >= colours:
+        raise RFBError(f"Tight palette index {max(indices)} outside a "
+                       f"{colours}-colour palette")
+    padding = bytes(256 - colours)
+    count = len(indices)
+    out = bytearray(count * 4)
+    for channel, offset in ((0, 2), (1, 1), (2, 0)):  # B, G, R from R, G, B
+        out[channel::4] = indices.translate(palette[offset::3] + padding)
+    out[3::4] = b"\xff" * count
+    return out
+
+
+def _undo_gradient(data, w, h):
+    """Reverse Tight's gradient filter. Each byte is a channel's difference
+    from the prediction left + above - above-left, clamped to 0-255."""
+    out = bytearray(w * h * 4)
+    above = [0] * (w * 3)
+    for y in range(h):
+        row = [0] * (w * 3)
+        base = y * w * 3
+        for i in range(w * 3):
+            if i >= 3:
+                predicted = row[i - 3] + above[i] - above[i - 3]
+                predicted = min(max(predicted, 0), 255)
+            else:
+                predicted = above[i]
+            row[i] = (data[base + i] + predicted) & 0xFF
+        out[y * w * 4:(y + 1) * w * 4] = _rgb_to_bgrx(bytes(row), w)
+        above = row
     return out
 
 
