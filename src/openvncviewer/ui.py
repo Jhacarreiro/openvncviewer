@@ -138,10 +138,10 @@ def _keysym(event, alt_is_command=False):
 class ClientSignals(QObject):
     """Moves RFBClient callbacks from the network thread onto the UI thread."""
 
-    resized = Signal(int, int)
-    damaged = Signal(int, int, int, int)
-    disconnected = Signal(object)
-    clipboard = Signal(str)
+    resized = Signal(object, int, int)
+    damaged = Signal(object, int, int, int, int)
+    disconnected = Signal(object, object)
+    clipboard = Signal(object, str)
 
 
 class RemoteView(QWidget):
@@ -874,16 +874,17 @@ class MainWindow(QMainWindow):
         self.resize(1400, 800)  # Wider to accommodate sidebar
 
         self.client = None
+        self._client_token = None
         # Takes Alt+Tab and the like from Windows while the remote has focus.
         self._key_hook = KeyboardHook(self._remote_has_keyboard,
                                       self._send_system_key)
         self._pending_history = None
         self.server_name = ""
         self.signals = ClientSignals()
-        self.signals.resized.connect(self._on_resize)
-        self.signals.damaged.connect(self.view.on_damage)
-        self.signals.disconnected.connect(self._on_disconnect)
-        self.signals.clipboard.connect(self._on_remote_clipboard)
+        self.signals.resized.connect(self._session_resized)
+        self.signals.damaged.connect(self._session_damaged)
+        self.signals.disconnected.connect(self._session_disconnected)
+        self.signals.clipboard.connect(self._session_clipboard)
 
         self.share_clipboard = True
         # Auto-reconnect state. `_session` holds the arguments to replay, and
@@ -1085,12 +1086,13 @@ class MainWindow(QMainWindow):
             self.history.forget_password(host)
         self.server_name = server_name
         self.status.setText(f"Connecting to {host}:{port}...")
+        token = self._client_token = object()
         self.client = RFBClient(
             host, port, username, password,
-            on_resize=self.signals.resized.emit,
-            on_damage=self.signals.damaged.emit,
-            on_disconnect=self.signals.disconnected.emit,
-            on_clipboard=self.signals.clipboard.emit,
+            on_resize=lambda w, h: self.signals.resized.emit(token, w, h),
+            on_damage=lambda *bounds: self.signals.damaged.emit(token, *bounds),
+            on_disconnect=lambda reason: self.signals.disconnected.emit(token, reason),
+            on_clipboard=lambda text: self.signals.clipboard.emit(token, text),
         )
         self.view.attach(self.client)
         self._set_menu_mnemonics(False)
@@ -1105,6 +1107,9 @@ class MainWindow(QMainWindow):
         died, and the view holds a pointer into it - without that counting as
         the user giving up.
         """
+        # stop() silences future callbacks, but cannot retract signals already
+        # queued in Qt. Invalidate them before another session can attach.
+        self._client_token = None
         self._key_hook.uninstall()
         if self.client:
             self.client.stop()
@@ -1173,6 +1178,22 @@ class MainWindow(QMainWindow):
         # actually is, and keep the count visible while the dial is in flight.
         self.status.setText(f"Reconnecting to {host}:{port} "
                             f"(attempt {attempt} of {RECONNECT_ATTEMPTS})...")
+
+    def _session_resized(self, token, width, height):
+        if token is self._client_token:
+            self._on_resize(width, height)
+
+    def _session_damaged(self, token, x, y, w, h):
+        if token is self._client_token:
+            self.view.on_damage(x, y, w, h)
+
+    def _session_disconnected(self, token, reason):
+        if token is self._client_token:
+            self._on_disconnect(reason)
+
+    def _session_clipboard(self, token, text):
+        if token is self._client_token:
+            self._on_remote_clipboard(text)
 
     def _on_resize(self, width, height):
         # The session is up, so the retry budget is spent and replenished. Any
