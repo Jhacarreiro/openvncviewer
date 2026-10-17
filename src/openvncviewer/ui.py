@@ -71,6 +71,13 @@ BUTTONS = {Qt.LeftButton: 1, Qt.MiddleButton: 2, Qt.RightButton: 4}
 
 # The saved-servers sidebar's share of the window width until it is dragged.
 SIDEBAR_FRACTION = 0.2
+# The most a saved width may take on launch. It can still be dragged wider,
+# but a window should never open with the remote squeezed into a strip.
+SIDEBAR_MAX_RESTORED_FRACTION = 0.5
+
+# A text send that finishes sooner than this never shows its progress
+# window, so a short one neither flashes it up nor takes the focus.
+TEXT_PROGRESS_DELAY_MS = 500
 
 # One notch of a standard mouse wheel, in eighths of a degree (Qt's unit).
 WHEEL_NOTCH = 120
@@ -442,14 +449,13 @@ class RemoteView(QWidget):
         progress.setWindowTitle("Send Text to Remote")
         progress.setAutoClose(False)
         progress.setAutoReset(False)
-        progress.setMinimumDuration(0)
+        progress.setMinimumDuration(TEXT_PROGRESS_DELAY_MS)
         progress.canceled.connect(self._stop_text_input)
         # Keep the sender alive until its worker finishes, including after a
         # disconnect. Explicitly queue lambdas so UI cleanup stays on Qt's thread.
         sender.finished.connect(lambda: self._on_text_sent(sender), Qt.QueuedConnection)
         sender.error.connect(lambda msg: self._on_text_error(msg, sender), Qt.QueuedConnection)
         sender.progress.connect(self._on_text_progress)
-        progress.show()
         sender.send_text(text)
 
     def _on_text_progress(self, sent, total):
@@ -925,8 +931,6 @@ class MainWindow(QMainWindow):
         # Remote view
         self.view = RemoteView()
         self.splitter.addWidget(self.view)
-        # Sized on first show, once the window knows its own width.
-        self._sidebar_sized = False
 
         self.setCentralWidget(self.splitter)
 
@@ -1018,7 +1022,7 @@ class MainWindow(QMainWindow):
         except (TypeError, ValueError):
             fraction = SIDEBAR_FRACTION
         if 0 < fraction < 1:
-            self._sidebar_fraction = fraction
+            self._sidebar_fraction = min(fraction, SIDEBAR_MAX_RESTORED_FRACTION)
         self.host_panel.sort_by_last_used.setChecked(
             self._settings.value("sidebar/sort_by_last_used", False, type=bool))
         self.host_panel.set_collapsed(
@@ -1443,10 +1447,13 @@ class MainWindow(QMainWindow):
         """Refresh the host list panel."""
         self.host_panel.refresh_list()
 
-    def showEvent(self, event):
-        super().showEvent(event)
-        if not self._sidebar_sized:
-            self._sidebar_sized = True
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Hold the sidebar to its share whenever the window changes size. Doing
+        # it only on first show missed a window restored maximized: it is first
+        # shown at its normal size, where the sidebar's minimum can inflate the
+        # share, and maximizing then stretched that inflated sidebar.
+        if not self.host_panel.body.isHidden():
             self._apply_sidebar_width()
 
     def _on_sidebar_collapsed(self, collapsed):
@@ -1456,7 +1463,9 @@ class MainWindow(QMainWindow):
             self._apply_sidebar_width()
 
     def _apply_sidebar_width(self):
-        total = sum(self.splitter.sizes()) or self.width()
+        # The splitter's own width, not the sum of sizes(): mid-resize those
+        # still describe the old layout.
+        total = self.splitter.width() - self.splitter.handleWidth()
         sidebar = round(total * self._sidebar_fraction)
         self.splitter.setSizes([sidebar, total - sidebar])
 
