@@ -79,6 +79,47 @@ class RectangleBodyTest(unittest.TestCase):
 class DesktopSizeTest(unittest.TestCase):
     """The announced desktop is a `u16` pair whose product is an allocation."""
 
+    def test_a_resize_flood_is_stopped_before_a_second_allocation(self):
+        instance = client(1, 1)
+        sizes = []
+        instance._on_resize = lambda w, h: sizes.append((w, h))
+        # Tiny buffers keep this probe safe even without the guard. A real
+        # peer can use the same headers to request 65535 large allocations.
+        rect = struct.pack("!HHHHi", 0, 0, 2, 2, -223)
+        instance._reader = Recorder(struct.pack("!xH", 65535) + rect * 65535)
+        instance.request_update = lambda **kw: None
+        with self.assertRaisesRegex(RFBError, "DesktopSize"):
+            instance._handle_framebuffer_update()
+        self.assertEqual(sizes, [(2, 2)])
+        self.assertEqual(instance._reader.pos, 3 + 2 * 12)
+
+    def test_a_single_resize_can_precede_pixels_and_requests_a_full_refresh(self):
+        instance = client(1, 1)
+        sizes, requests = [], []
+        instance._on_resize = lambda w, h: sizes.append((w, h))
+        instance.request_update = lambda **kw: requests.append(kw)
+        pixels = bytes((10, 20, 30, 255)) * 4
+        instance._reader = Recorder(
+            struct.pack("!xH", 2)
+            + struct.pack("!HHHHi", 0, 0, 2, 2, -223)
+            + struct.pack("!HHHHi", 0, 0, 2, 2, 0) + pixels)
+        instance._handle_framebuffer_update()
+        self.assertEqual(sizes, [(2, 2)])
+        self.assertEqual(bytes(instance.framebuffer), pixels)
+        self.assertEqual(requests, [{"incremental": False}])
+
+    def test_separate_updates_can_each_change_the_desktop_size(self):
+        instance = client(1, 1)
+        sizes = []
+        instance._on_resize = lambda w, h: sizes.append((w, h))
+        instance.request_update = lambda **kw: None
+        for width, height in ((2, 3), (4, 2)):
+            instance._reader = Recorder(
+                struct.pack("!xH", 1)
+                + struct.pack("!HHHHi", 0, 0, width, height, -223))
+            instance._handle_framebuffer_update()
+        self.assertEqual(sizes, [(2, 3), (4, 2)])
+
     def test_the_maximum_u16_desktop_is_refused(self):
         """65535x65535x4 is a 17GB bytearray asked for by four bytes."""
         instance = client(1, 1)
