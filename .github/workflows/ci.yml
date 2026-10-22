@@ -109,6 +109,13 @@ jobs:
           if found != "${{ matrix.arch }}":
               sys.exit(f"expected ${{ matrix.arch }}, built {found}")
 
+      - name: Smoke-test the bundled executable
+        shell: python
+        run: |
+          import subprocess
+          subprocess.run(["dist/OpenVNCViewer-${{ matrix.arch }}.exe", "--version"],
+                         check=True, timeout=30)
+
       - uses: actions/upload-artifact@v7
         with:
           name: OpenVNCViewer-windows-${{ matrix.arch }}
