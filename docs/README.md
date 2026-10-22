@@ -56,7 +56,7 @@ Fixed in **0.15.0**:
 | AUTH-01 / NET-4 | Medium | Supplying a username requires ARD; legacy VNC and unauthenticated fallback are refused before a selection or credential response is sent |
 | BL-1 | Medium | Queued UI events are bound to the session that emitted them, so a stopped session cannot change or disconnect its replacement |
 
-Still open, and tracked in [TODO.md](../TODO.md):
+Further findings tracked in [TODO.md](../TODO.md), with subsequent fixes noted:
 
 | Finding | Severity | Summary |
 | --- | --- | --- |
@@ -65,7 +65,7 @@ Still open, and tracked in [TODO.md](../TODO.md):
 | NET-3 | Medium | No post-connect deadlines; `stop()` does not reliably interrupt a buffered read |
 | BL-5 | Medium | Concurrent instances can undo history deletions through whole-file writes |
 | SC-01 / CFG-01 | Medium | Actions are referenced by mutable tags in a job holding `contents: write` |
-| SC-03 / CFG-03 | Medium | Dependencies are not hash-pinned at build time |
+| SC-03 / CFG-03 | Medium | **Addressed (unreleased):** the Windows executable build verifies hashes for its complete dependency and build-tool set; the test matrix still exercises the declared ranges |
 | SC-04 | Medium | Releases are unsigned; `SHA256SUMS.txt` proves integrity, not authenticity |
 | IF-3 | Low | Trailing decompressed ZRLE bytes are accepted and discarded |
 | F3 | Low | Server-supplied strings reach Qt widgets that can interpret rich text |

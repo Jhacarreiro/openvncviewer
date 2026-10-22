@@ -70,11 +70,17 @@ jobs:
           python-version: "3.13"
           cache: pip
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          pip install -e .
+      - name: Install verified build dependencies
+        run: 'python -m pip install --require-hashes --only-binary=:all: -r requirements-build-windows.txt'
+
+      - name: Check the lock matches the maintained top-level pins
+        run: python -m pip install --no-index --no-deps -r requirements-dev.txt
+
+      - name: Install the local project with verified build tools
+        run: python -m pip install --no-index --no-build-isolation --no-deps -e .
+
+      - name: Check installed dependencies
+        run: python -m pip check
 
       - name: Build single-file executable
         run: pyinstaller --noconfirm --clean packaging/openvncviewer.spec
