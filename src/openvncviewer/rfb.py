@@ -563,6 +563,11 @@ class RFBClient:
             elif encoding == ENC_TIGHT and self.jpeg_quality is not None:
                 self._decode_tight(x, y, w, h)
             elif encoding == ENC_DESKTOP_SIZE:
+                # One update describes one desktop transition. Bound both the
+                # allocations and the queued UI callbacks, even when every
+                # individual size is within the framebuffer limits.
+                if resized:
+                    raise RFBError("multiple DesktopSize rectangles in one update")
                 self._resize(w, h)
                 resized = True
                 continue
