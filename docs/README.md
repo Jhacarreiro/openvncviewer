@@ -62,7 +62,7 @@ Still open, and tracked in [TODO.md](../TODO.md):
 | --- | --- | --- |
 | IF-2 / BL-3 | Medium | One update can carry 65,535 DesktopSize rectangles, each causing a reallocation and a UI callback |
 | AUTH-02 | Medium | ARD accepts small-subgroup peer keys |
-| NET-3 | Medium | No post-connect deadlines; `stop()` does not reliably interrupt a buffered read |
+| NET-3 | Medium | Handshake now has a 30-second total deadline and `stop()` shuts down the socket; DNS resolution and established-session read deadlines remain open |
 | BL-5 | Medium | Concurrent instances can undo history deletions through whole-file writes |
 | SC-01 / CFG-01 | Medium | Actions are referenced by mutable tags in a job holding `contents: write` |
 | SC-03 / CFG-03 | Medium | Dependencies are not hash-pinned at build time |
