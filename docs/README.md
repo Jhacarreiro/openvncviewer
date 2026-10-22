@@ -60,11 +60,11 @@ Further findings tracked in [TODO.md](../TODO.md), with subsequent fixes noted:
 
 | Finding | Severity | Summary |
 | --- | --- | --- |
-| IF-2 / BL-3 | Medium | One update can carry 65,535 DesktopSize rectangles, each causing a reallocation and a UI callback |
+| IF-2 / BL-3 | Medium | **Addressed (unreleased):** a second DesktopSize rectangle in one update is refused before allocating or notifying the UI |
 | AUTH-02 | Medium | ARD accepts small-subgroup peer keys |
-| NET-3 | Medium | No post-connect deadlines; `stop()` does not reliably interrupt a buffered read |
+| NET-3 | Medium | Handshake now has a 30-second total deadline and `stop()` shuts down the socket; DNS resolution and established-session read deadlines remain open |
 | BL-5 | Medium | Concurrent instances can undo history deletions through whole-file writes |
-| SC-01 / CFG-01 | Medium | Actions are referenced by mutable tags in a job holding `contents: write` |
+| SC-01 / CFG-01 | Medium | **Addressed (unreleased):** every external action is pinned to a full commit SHA, including the job holding `contents: write` |
 | SC-03 / CFG-03 | Medium | **Addressed (unreleased):** the Windows executable build verifies hashes for its complete dependency and build-tool set; the test matrix still exercises the declared ranges |
 | SC-04 | Medium | Releases are unsigned; `SHA256SUMS.txt` proves integrity, not authenticity |
 | IF-3 | Low | Trailing decompressed ZRLE bytes are accepted and discarded |
