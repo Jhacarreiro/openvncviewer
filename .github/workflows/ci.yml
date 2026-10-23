@@ -72,11 +72,17 @@ jobs:
           python-version: "3.13"
           cache: pip
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          pip install -e .
+      - name: Install verified build dependencies
+        run: 'python -m pip install --require-hashes --only-binary=:all: -r requirements-build-windows.txt'
+
+      - name: Check the lock matches the maintained top-level pins
+        run: python -m pip install --no-index --no-deps -r requirements-dev.txt
+
+      - name: Install the local project with verified build tools
+        run: python -m pip install --no-index --no-build-isolation --no-deps -e .
+
+      - name: Check installed dependencies
+        run: python -m pip check
 
       - name: Build single-file executable
         run: pyinstaller --noconfirm --clean packaging/openvncviewer.spec
@@ -104,6 +110,13 @@ jobs:
           print(f"{path}: PE machine = {found}")
           if found != "${{ matrix.arch }}":
               sys.exit(f"expected ${{ matrix.arch }}, built {found}")
+
+      - name: Smoke-test the bundled executable
+        shell: python
+        run: |
+          import subprocess
+          subprocess.run(["dist/OpenVNCViewer-${{ matrix.arch }}.exe", "--version"],
+                         check=True, timeout=30)
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:

@@ -26,6 +26,32 @@ speaks real macOS Screen Sharing — it announces `RFB 003.889`, does a genuine
 Diffie-Hellman exchange, and decrypts the credential block to check the client
 sent the right thing. You do **not** need a Mac to work on this project.
 
+## Windows executable dependencies
+
+The release build uses `requirements-build-windows.txt`, a complete wheel-only
+lock for Windows x64 / Python 3.13. It includes the
+transitive dependencies and the packaging tools, so installing the local project
+does not fetch an unchecked build backend. The test matrix still exercises the
+dependency ranges in `pyproject.toml`.
+
+To reproduce the dependency installation in a fresh environment:
+
+```powershell
+python -m pip install --require-hashes --only-binary=:all: -r requirements-build-windows.txt
+python -m pip install --no-index --no-deps -r requirements-dev.txt
+python -m pip install --no-index --no-build-isolation --no-deps -e .
+python -m pip check
+```
+
+When changing the pins in `requirements.txt` or `requirements-dev.txt`, refresh
+the build lock in the same PR. Download the intended wheels into an empty folder
+with `pip download --only-binary=:all:` for Windows x64, including `pip`,
+`setuptools`, `wheel` and every transitive dependency for Python 3.13.
+Use `python -m pip hash <wheel>` to obtain each
+SHA256, then record exact versions and those hashes in the lock. Check it by
+installing in a clean environment with `--require-hashes`; a missing dependency,
+changed wheel or mismatch with the maintained top-level pins must fail the build.
+
 ## How to test protocol changes
 
 Please do not hand-verify decoder changes by looking at a screenshot. The
