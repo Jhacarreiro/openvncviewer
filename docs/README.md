@@ -56,16 +56,22 @@ Fixed in **0.15.0**:
 | AUTH-01 / NET-4 | Medium | Supplying a username requires ARD; legacy VNC and unauthenticated fallback are refused before a selection or credential response is sent |
 | BL-1 | Medium | Queued UI events are bound to the session that emitted them, so a stopped session cannot change or disconnect its replacement |
 
-Further findings tracked in [TODO.md](../TODO.md), with subsequent fixes noted:
+Fixed in **0.16.1**:
+
+| Finding | Severity | What changed |
+| --- | --- | --- |
+| IF-2 / BL-3 | Medium | A second DesktopSize rectangle in one update is refused before allocating or notifying the UI |
+| NET-3 (in part) | Medium | The handshake has a 30-second total deadline after TCP connects, which a peer cannot extend by trickling bytes |
+| SC-01 / CFG-01 | Medium | Every external action is pinned to a full commit SHA, including the job holding `contents: write` |
+| SC-03 / CFG-03 | Medium | The Windows executable build verifies hashes for its complete dependency and build-tool set; the test matrix still exercises the declared ranges |
+
+Still open, and tracked in [TODO.md](../TODO.md):
 
 | Finding | Severity | Summary |
 | --- | --- | --- |
-| IF-2 / BL-3 | Medium | **Addressed (unreleased):** a second DesktopSize rectangle in one update is refused before allocating or notifying the UI |
 | AUTH-02 | Medium | ARD accepts small-subgroup peer keys |
-| NET-3 | Medium | Handshake now has a 30-second total deadline and `stop()` shuts down the socket; DNS resolution and established-session read deadlines remain open |
+| NET-3 (rest) | Medium | DNS resolution and an established session's reads have no deadline |
 | BL-5 | Medium | Concurrent instances can undo history deletions through whole-file writes |
-| SC-01 / CFG-01 | Medium | **Addressed (unreleased):** every external action is pinned to a full commit SHA, including the job holding `contents: write` |
-| SC-03 / CFG-03 | Medium | **Addressed (unreleased):** the Windows executable build verifies hashes for its complete dependency and build-tool set; the test matrix still exercises the declared ranges |
 | SC-04 | Medium | Releases are unsigned; `SHA256SUMS.txt` proves integrity, not authenticity |
 | IF-3 | Low | Trailing decompressed ZRLE bytes are accepted and discarded |
 | F3 | Low | Server-supplied strings reach Qt widgets that can interpret rich text |
