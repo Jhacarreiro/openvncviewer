@@ -6,6 +6,36 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-10-23
+
+Everything in this release was contributed by @Jhacarreiro (#28, #29, #31,
+#32).
+
+### Fixed
+
+- **A server can no longer flood one update with desktop resizes.** One
+  framebuffer update could carry 65,535 DesktopSize rectangles, each
+  reallocating the framebuffer and queuing a UI callback, even when every
+  size was within the limits. A second DesktopSize in the same update now
+  ends the session before anything is allocated.
+
+- **A server that stalls the handshake is disconnected after 30 seconds.**
+  A peer that accepted the TCP connection but never finished negotiating -
+  sending nothing, stopping partway, or trickling a byte at a time - held
+  the connection open indefinitely. Negotiation now has a 30-second total
+  budget; once connected, an idle session stays up exactly as before.
+
+### Security
+
+- **CI actions are pinned to full commit SHAs**, including in the release
+  job that can publish, so a moved tag cannot change what runs.
+
+- **The Windows build installs only hash-verified wheels.** Every package
+  the executable is built from, build tools included, is locked to a
+  SHA-256 in `requirements-build-windows.txt`. The build also starts the
+  finished executable before uploading it, so one with unloadable Qt
+  libraries fails CI.
+
 ## [0.16.0] - 2026-10-17
 
 ### Added
@@ -689,7 +719,8 @@ First public release.
 - The remote view read its client attribute during `__init__`, before it was
   assigned, because Qt dispatches an event from `setMouseTracking`.
 
-[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/riazhassan-za/openvncviewer/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/riazhassan-za/openvncviewer/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.14.1...v0.15.0
