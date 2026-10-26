@@ -975,6 +975,8 @@ class MainWindow(QMainWindow):
         self.host_panel.edit_requested.connect(self._on_panel_edit_requested)
         self.host_panel.disconnect_requested.connect(self._on_panel_disconnect_requested)
         self.host_panel.refresh_requested.connect(self._on_panel_refresh_requested)
+        self.host_panel.type_password_requested.connect(
+            self.type_connection_password)
         self.splitter.addWidget(self.host_panel)
 
         # Remote view
@@ -1272,6 +1274,7 @@ class MainWindow(QMainWindow):
             self.client = None
         self.view.detach()
         self.host_panel.set_disconnected_state()
+        self.host_panel.set_password_target(None)
         self._set_menu_mnemonics(True)
         self.server_name = ""
         self.setWindowTitle("OpenVNCViewer")
@@ -1379,6 +1382,36 @@ class MainWindow(QMainWindow):
 
         if self.client and self._session:
             self.host_panel.set_connected_state(self._session["host"])
+            # Only a macOS account password is worth typing on the Mac: a
+            # standard VNC password unlocks the VNC server and nothing else.
+            if self._session["username"] and self._session["password"]:
+                host = self._session["host"]
+                self.host_panel.set_password_target(
+                    f"{label} ({host})" if label and label != host else host)
+
+    def type_connection_password(self):
+        """Type the password this session logged in with, without Enter.
+
+        Reuses the password already held for the session rather than storing
+        anything new, so it works whether or not it was saved. Goes through the
+        view's text send, so it shows the same progress, stops the same way,
+        and is ignored while another send is still typing.
+        """
+        session = self._session
+        if not (self.client and session and session["username"]
+                and session["password"]):
+            return
+        if not TextSender.types_literally(session["password"]):
+            QMessageBox.warning(
+                self, "Type Connection Password",
+                "The password contains Tab, Enter or another control "
+                "character, which would act on the Mac rather than type into "
+                "the field. Nothing was sent.")
+            return
+        # A modifier still held down would turn every key into a shortcut.
+        self.view.release_all_keys()
+        self.view._send_text_input(session["password"],
+                                   TextSender.DEFAULT_DELAY_MS)
 
     def _on_remote_clipboard(self, text):
         """The server copied something; mirror it locally."""

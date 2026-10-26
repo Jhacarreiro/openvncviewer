@@ -134,6 +134,18 @@ class TextSender(QObject):
         # Everything else uses the X11 Unicode keysym range
         return 0x01000000 + code
 
+    @classmethod
+    def types_literally(cls, text):
+        """Whether every character goes out as a key that types just itself.
+
+        Enter and Tab are keys, but they act on the remote rather than typing
+        into the field. Inside a password that submits the login half-typed or
+        jumps to the next field, and the other control characters would be
+        dropped, so the remote would get a different password.
+        """
+        return all(char not in "\t\n\r" and cls._char_to_keysym(char) is not None
+                   for char in text)
+
     def stop(self):
         """Stop sending text if currently in progress."""
         self._stop_event.set()

@@ -35,6 +35,7 @@ class HostListPanel(QWidget):
     edit_requested = Signal(str, int)  # host, port
     disconnect_requested = Signal()
     refresh_requested = Signal()
+    type_password_requested = Signal()
     collapsed_changed = Signal(bool)
 
     def __init__(self, history, parent=None):
@@ -138,6 +139,11 @@ class HostListPanel(QWidget):
         actions_layout.addWidget(self.delete_btn)
 
         layout.addLayout(actions_layout)
+
+        self.type_password_btn = QPushButton("Type Connection Password")
+        self.type_password_btn.clicked.connect(self.type_password_requested.emit)
+        self.set_password_target(None)
+        layout.addWidget(self.type_password_btn)
 
         # Status indicator
         self.status_label = QLabel("No servers saved")
@@ -342,6 +348,19 @@ Auto-reconnect: {entry.get('auto_reconnect', False)}
             else:
                 # Reset other items
                 item.setBackground(QColor("white"))
+
+    def set_password_target(self, label):
+        """Offer to type the session's password into `label`, or into nothing.
+
+        VNC cannot tell which field has focus on the remote, so the tooltip
+        names the Mac the keys will go to rather than leaving it implied.
+        """
+        self.type_password_btn.setEnabled(label is not None)
+        self.type_password_btn.setToolTip(
+            f"Type the password used to connect into {label}, as key presses.\n"
+            "Click the password field on the Mac first. Enter is not pressed."
+            if label is not None else
+            "Available while connected to a Mac with a macOS account.")
 
     def set_disconnected_state(self):
         """Clear connection highlighting."""

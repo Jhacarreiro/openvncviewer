@@ -285,6 +285,15 @@ at a time, and Windows CRLF line endings produce a single Enter.
 travel over the VNC connection, so use an encrypted connection when sending
 sensitive text.
 
+### Typing the connection password
+
+On a macOS session, **Type Connection Password** in the sidebar types the
+password you connected with into the Mac, for the lock screen or an
+administrator prompt. Click the password field on the Mac first; Enter is not
+pressed, so you confirm it yourself. It uses the password the session already
+has and stores nothing new, and like any key press it travels over the VNC
+connection.
+
 ## Full screen
 
 **View → Full screen**, or **F11**, hands the whole screen to the remote

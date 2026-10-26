@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Type Connection Password**, a sidebar button that types the password the
+  session logged in with into the Mac, as key presses. It is for the prompts
+  that ask for the macOS account password again once you are in: the lock
+  screen, an administrator prompt, a Keychain dialog. Click the field on the
+  Mac, then the button. Nothing new is stored: it uses the password the
+  session already holds, saved or not.
+
+  It never presses Enter, and a password containing Tab, Enter or another
+  control character is refused whole rather than typed as keys that would act
+  on the Mac. The button is only enabled while a macOS session is up, since a
+  standard VNC password unlocks nothing on the Mac, and its tooltip names the
+  Mac the keys go to, because VNC cannot tell which field has focus. It goes
+  through the same send as Ctrl+Shift+V, so it shows the same progress, can
+  be stopped, stops on disconnect, and a second click while it is typing is
+  ignored.
+
 ## [0.16.1] - 2026-10-23
 
 Everything in this release was contributed by @Jhacarreiro (#28, #29, #31,
