@@ -133,6 +133,10 @@ would have to change to widen it, not a backlog anyone has committed to.
   seconds of startup. A one-folder build removes the delay at the cost of
   shipping a directory. Consider offering both on releases.
 - [ ] No installer, no Start Menu entry, no file association, no auto-update.
+- [x] **Release notifications:** Help can check for newer stable releases and
+  open the official release page. Startup checks are optional and off by
+  default; their status-bar notice does not interrupt a VNC session. Downloads
+  and executable replacement remain manual.
 - [ ] **No macOS or Linux build of the *viewer* itself, and this is now the
   stated scope rather than a gap.** The project is documented as a Windows x64
   application that connects to macOS Screen Sharing and standard VNC servers.

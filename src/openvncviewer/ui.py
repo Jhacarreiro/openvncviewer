@@ -19,9 +19,9 @@ from pathlib import Path
 
 from PySide6.QtCore import (QBuffer, QByteArray, QEvent, QIODevice, QObject,
                             QPoint, QRect, QRectF, QSize, QStandardPaths, Qt,
-                            QTimer, Signal)
-from PySide6.QtGui import (QAction, QColor, QImage, QImageReader, QKeySequence,
-                           QPainter, QPixmap)
+                            QTimer, QUrl, Signal)
+from PySide6.QtGui import (QAction, QColor, QDesktopServices, QImage, QImageReader,
+                           QKeySequence, QPainter, QPixmap)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
                                QFormLayout,
                                QGroupBox, QHBoxLayout, QLabel, QLineEdit,
@@ -36,6 +36,7 @@ from .keyhook import KeyboardHook
 from .rfb import RFBClient, RFBError
 from .text_input import TextSender
 from .host_panel import HostListPanel
+from .updates import UpdateChecker
 
 HOMEPAGE = "https://github.com/riazhassan-za/openvncviewer"
 
@@ -955,6 +956,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._settings = settings
         self._windowed_geometry = None
+        self._update_checker = None
+        self._available_release = None
+        self._manual_update_check = False
+        self._closing = False
         self.setWindowTitle("OpenVNCViewer")
 
         # A splitter, so the sidebar can be dragged wider or narrower. It
@@ -985,6 +990,11 @@ class MainWindow(QMainWindow):
 
         self.status = QLabel("Not connected")
         self.statusBar().addWidget(self.status)
+        self.update_notice = QPushButton()
+        self.update_notice.setFlat(True)
+        self.update_notice.clicked.connect(self.show_available_update)
+        self.statusBar().addPermanentWidget(self.update_notice)
+        self.update_notice.hide()
         self.resize(1400, 800)  # Wider to accommodate sidebar
 
         self.client = None
@@ -1048,6 +1058,13 @@ class MainWindow(QMainWindow):
         self.addAction(self.fullscreen_action)
 
         help_menu = self.menuBar().addMenu("&Help")
+        self.check_updates_action = help_menu.addAction(
+            "Check for &updates...", lambda: self.check_for_updates())
+        self.check_updates_startup_action = QAction("Check for updates at &startup", self)
+        self.check_updates_startup_action.setCheckable(True)
+        self.check_updates_startup_action.triggered.connect(self._save_preferences)
+        help_menu.addAction(self.check_updates_startup_action)
+        help_menu.addSeparator()
         help_menu.addAction("&About", self.show_about)
 
         # Alt+F, Alt+V and Alt+H belong to the remote while a session is up.
@@ -1057,6 +1074,8 @@ class MainWindow(QMainWindow):
                        (help_menu, "&Help")]
         self.last_connection = ("", 5900, "", WHEEL_SPEED_DEFAULT)
         self._restore_preferences()
+        if self.check_updates_startup_action.isChecked():
+            QTimer.singleShot(0, self._check_startup_updates)
 
     def _restore_preferences(self):
         if self._settings is None:
@@ -1076,6 +1095,8 @@ class MainWindow(QMainWindow):
             self._settings.value("sidebar/sort_by_last_used", False, type=bool))
         self.host_panel.set_collapsed(
             not self._settings.value("sidebar/visible", True, type=bool))
+        self.check_updates_startup_action.setChecked(
+            self._settings.value("updates/check_on_startup", False, type=bool))
 
     def _save_preferences(self):
         if self._settings is None:
@@ -1089,7 +1110,64 @@ class MainWindow(QMainWindow):
         self._settings.setValue("sidebar/visible", self.toggle_sidebar_action.isChecked())
         self._settings.setValue("sidebar/sort_by_last_used",
                                 self.host_panel.sort_by_last_used.isChecked())
+        self._settings.setValue("updates/check_on_startup",
+                                self.check_updates_startup_action.isChecked())
         self._settings.sync()
+
+    def _check_startup_updates(self):
+        if not self._closing and self.check_updates_startup_action.isChecked():
+            self.check_for_updates(manual=False)
+
+    def check_for_updates(self, manual=True):
+        if self._closing or not self.check_updates_action.isEnabled():
+            return
+        if self._update_checker is None:
+            self._update_checker = UpdateChecker(self)
+            self._update_checker.finished.connect(self._on_update_check)
+        self._manual_update_check = manual
+        self.check_updates_action.setEnabled(False)
+        self.check_updates_action.setText("Checking for updates...")
+        self._update_checker.check()
+
+    def _on_update_check(self, release, error):
+        if self._closing:
+            return
+        self.check_updates_action.setEnabled(True)
+        self.check_updates_action.setText("Check for &updates...")
+        if error:
+            if self._manual_update_check:
+                QMessageBox.warning(self, "Update check", error)
+            return
+        self._available_release = release
+        self.update_notice.setVisible(release is not None)
+        if release is not None:
+            self.update_notice.setText(f"Version {release.version} available")
+            # Startup checks never steal focus or interrupt a VNC session.
+            if self._manual_update_check:
+                self.show_available_update()
+        elif self._manual_update_check:
+            QMessageBox.information(self, "Update check",
+                                    "You are running the latest stable version.")
+
+    def show_available_update(self):
+        release = self._available_release
+        if release is None:
+            return
+        message = QMessageBox(self)
+        message.setWindowTitle("Update available")
+        message.setIcon(QMessageBox.Information)
+        message.setTextFormat(Qt.PlainText)
+        message.setText(f"OpenVNCViewer {release.version} is available.\n"
+                        f"You are running {__version__}.\n\n"
+                        "Open the official release page to download it.")
+        if release.notes:
+            message.setDetailedText(release.notes)
+        open_release = message.addButton("Open release page", QMessageBox.AcceptRole)
+        later = message.addButton("Later", QMessageBox.RejectRole)
+        message.setDefaultButton(later)
+        message.exec()
+        if message.clickedButton() == open_release:
+            QDesktopServices.openUrl(QUrl(release.url))
 
     def _set_menu_mnemonics(self, enabled):
         """Take the menu bar out of the Alt namespace while a session is up.
@@ -1538,6 +1616,9 @@ class MainWindow(QMainWindow):
         self.host_panel.set_collapsed(not self.toggle_sidebar_action.isChecked())
 
     def closeEvent(self, event):
+        self._closing = True
+        if self._update_checker is not None:
+            self._update_checker.cancel()
         self._save_preferences()
         self.disconnect()
         super().closeEvent(event)
