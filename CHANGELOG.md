@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-28
+
+Contributed by @Jhacarreiro (#34).
+
+### Added
+
+- **Help → Check for updates…** asks GitHub for the latest stable release
+  and, if it is newer, shows its version and release notes with a button
+  that opens the project's release page. Nothing is downloaded or installed;
+  updating is still manual.
+
+- **Help → Check for updates at startup**, off by default. When ticked, the
+  check runs in the background as the viewer opens, and a newer release
+  shows as a button in the status bar rather than a dialog over the session.
+
+  These are the viewer's only connections other than to a VNC server, and
+  they are made only when asked for: a check sends GitHub your IP address
+  and the viewer's version, with no account or token. Release notes are
+  shown as plain text, the page opened is always this project's own, and a
+  check gives up after 10 seconds or 1MB.
+
 ## [0.16.1] - 2026-10-23
 
 Everything in this release was contributed by @Jhacarreiro (#28, #29, #31,
@@ -719,7 +740,8 @@ First public release.
 - The remote view read its client attribute during `__init__`, before it was
   assigned, because Qt dispatches an event from `setMouseTracking`.
 
-[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.16.1...v0.17.0
 [0.16.1]: https://github.com/riazhassan-za/openvncviewer/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/riazhassan-za/openvncviewer/compare/v0.15.0...v0.15.1

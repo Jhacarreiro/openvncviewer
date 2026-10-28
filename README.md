@@ -603,7 +603,9 @@ Send Bitcoin:
 
 The same address appears under **Help → About** in the viewer. There is no
 paid tier, no telemetry and nothing withheld — the executable on the releases
-page is the whole program.
+page is the whole program. The only connection it makes other than to your VNC
+server is the [update check](#checking-for-updates), and only when you ask for
+it.
 
 ## Contributing
 
