@@ -46,11 +46,10 @@ FORMAT_VERSION = 1
 def _history_lock(path):
     # Lock a stable sibling, since atomic replacement changes the JSON file's
     # inode/handle. Never unlink it: another instance may already have it open.
+    # It stays empty: Windows locks a byte past the end as readily as one in
+    # it, and writing a placeholder raced when two instances created the file.
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.with_name(path.name + ".lock").open("a+b") as lock:
-        if lock.seek(0, os.SEEK_END) == 0:
-            lock.write(b"\0")
-            lock.flush()
         deadline = time.monotonic() + 1
         while True:
             try:
