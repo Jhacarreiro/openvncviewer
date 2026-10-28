@@ -5,6 +5,7 @@ import multiprocessing
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from openvncviewer.history import MAX_ENTRIES, ServerHistory
 
@@ -230,6 +231,35 @@ class ServerHistoryTest(unittest.TestCase):
             with self.subTest(junk=junk):
                 self.path.write_text(junk, encoding="utf-8")
                 self.assertEqual(ServerHistory(self.path).entries(), [])
+
+    def test_a_read_that_fails_during_a_change_does_not_wipe_the_list(self):
+        """Unreadable is not empty: another program holding the file open
+        must not turn one change into a list of just that server."""
+        history = ServerHistory(self.path)
+        for host in ("mac", "laptop", "nas"):
+            history.remember(host, 5900, password="tok-" + host)
+        read_text = Path.read_text
+
+        def fails_once(path, *args, **kwargs):
+            if path == self.path and not failed:
+                failed.append(path)
+                raise PermissionError(13, "sharing violation")
+            return read_text(path, *args, **kwargs)
+
+        failed = []
+        with mock.patch.object(Path, "read_text", fails_once):
+            history.remember("new", 5900)
+        self.assertTrue(failed, "the change did not re-read the file")
+
+        self.assertEqual(ServerHistory(self.path).hosts(), ["nas", "laptop", "mac"])
+        self.assertEqual(history.hosts(), ["new", "nas", "laptop", "mac"],
+                         "the change was lost from this instance too")
+
+    def test_a_corrupt_file_is_replaced_by_the_next_change(self):
+        self.path.write_text("not json at all", encoding="utf-8")
+        history = ServerHistory(self.path)
+        history.remember("mac.local", 5900)
+        self.assertEqual(ServerHistory(self.path).hosts(), ["mac.local"])
 
     def test_junk_entries_are_dropped_and_bad_ports_defaulted(self):
         self.path.write_text(json.dumps({"servers": [

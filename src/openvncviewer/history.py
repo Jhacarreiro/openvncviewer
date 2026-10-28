@@ -132,17 +132,22 @@ class ServerHistory:
     # ------------------------------------------------------------------ disk
 
     def load(self):
+        """Read the list from disk. Returns False, keeping the list in
+        memory, when the file is there but cannot be read just now."""
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
         except FileNotFoundError:
-            self._entries = []
-            return
-        except (OSError, ValueError, UnicodeDecodeError):
-            # Unreadable or corrupt. Losing the list is a nuisance; refusing to
-            # start over it would be worse.
-            self._entries = []
-            return
+            raw = None
+        except OSError:
+            # Another program may have it open. That is not the same as an
+            # empty list, and must not be saved over as one.
+            return False
+        except ValueError:
+            # Corrupt (UnicodeDecodeError is a ValueError too). Losing the list
+            # is a nuisance; refusing to start over it would be worse.
+            raw = None
         self._entries = self._clean(raw)
+        return True
 
     @staticmethod
     def _clean(raw):
@@ -202,7 +207,10 @@ class ServerHistory:
                 # Keep the viewer usable, but never write a stale snapshot
                 # when the directory is unwritable or another writer is stuck.
                 return operation()
-            self.load()
+            if not self.load():
+                # Saving now would replace every other server with just this
+                # change, so apply it in memory only, as when the lock fails.
+                return operation()
             result = operation()
             self._save()
             return result
