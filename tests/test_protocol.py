@@ -13,10 +13,13 @@ import struct
 import threading
 import time
 import unittest
+from unittest import mock
 import zlib
 
 from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+from openvncviewer import rfb
 
 from openvncviewer.rfb import SEC_NONE, SEC_VNC, RFBClient, RFBError
 
@@ -955,6 +958,98 @@ class ProtocolTest(unittest.TestCase):
                               f"{actual[index:index + 4].hex()} != "
                               f"{expected[index:index + 4].hex()}")
 
+
+class HandshakeDeadlineTest(unittest.TestCase):
+    def exchange(self, serve, timeout=0.3):
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        self.addCleanup(listener.close)
+        finished = threading.Event()
+        accepted = threading.Event()
+        failures = []
+
+        def run_server():
+            try:
+                with listener.accept()[0] as conn:
+                    conn.settimeout(2)
+                    accepted.set()
+                    serve(conn, finished)
+            except OSError:
+                pass  # The client closing on timeout is expected.
+
+        thread = threading.Thread(target=run_server, daemon=True)
+        thread.start()
+        client = rfb.RFBClient(
+            "127.0.0.1", listener.getsockname()[1], "", "",
+            lambda *a: None, lambda *a: None,
+            lambda reason: (failures.append(reason), finished.set()))
+        self.addCleanup(client.stop)
+        self.addCleanup(finished.set)
+        with mock.patch.object(rfb, "HANDSHAKE_TIMEOUT", timeout, create=True):
+            client.start()
+            self.assertTrue(accepted.wait(2), "TCP connection did not arrive")
+            self.assertTrue(finished.wait(1.5), "negotiation stayed blocked")
+            client._thread.join(1)
+        thread.join(1)
+        self.assertFalse(client._thread.is_alive(), "network thread survived")
+        return client, failures
+
+    def test_a_peer_that_never_sends_a_banner_is_disconnected(self):
+        client, failures = self.exchange(lambda conn, done: done.wait(2))
+        self.assertFalse(client.was_connected)
+        self.assertFalse(client.auth_failed)
+        self.assertIn("handshake", failures[0].lower())
+
+    def test_trickling_a_banner_does_not_restart_the_deadline(self):
+        def trickle(conn, done):
+            for byte in b"RFB 003.008\n":
+                conn.sendall(bytes([byte]))
+                if done.wait(0.1):
+                    break
+
+        client, failures = self.exchange(trickle)
+        self.assertFalse(client.was_connected)
+        self.assertIn("handshake", failures[0].lower())
+
+    def test_a_peer_that_stalls_in_server_init_is_disconnected(self):
+        def stall(conn, done):
+            with conn.makefile("rb") as reader:
+                conn.sendall(b"RFB 003.008\n")
+                reader.read(12)
+                conn.sendall(b"\x01\x01")
+                reader.read(1)
+                conn.sendall(struct.pack("!I", 0))
+                reader.read(1)
+                conn.sendall(struct.pack("!HH", 2, 2))
+                done.wait(2)
+
+        client, failures = self.exchange(stall)
+        self.assertFalse(client.was_connected)
+        self.assertIn("handshake", failures[0].lower())
+
+    def test_an_established_idle_session_outlives_the_handshake_budget(self):
+        connected = threading.Event()
+
+        def idle(conn, done):
+            with conn.makefile("rb") as reader:
+                conn.sendall(b"RFB 003.008\n")
+                reader.read(12)
+                conn.sendall(b"\x01\x01")
+                reader.read(1)
+                conn.sendall(struct.pack("!I", 0))
+                reader.read(1)
+                conn.sendall(struct.pack("!HH", 2, 2) + bytes(16)
+                             + struct.pack("!I", 0))
+                connected.set()
+                if done.wait(0.7):
+                    return
+
+        client, failures = self.exchange(idle)
+        self.assertTrue(connected.is_set())
+        self.assertTrue(client.was_connected)
+        self.assertEqual(len(failures), 1)
+        self.assertNotIn("handshake", failures[0].lower())
 
 if __name__ == "__main__":
     unittest.main()

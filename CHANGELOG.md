@@ -6,6 +6,57 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-28
+
+Contributed by @Jhacarreiro (#34).
+
+### Added
+
+- **Help → Check for updates…** asks GitHub for the latest stable release
+  and, if it is newer, shows its version and release notes with a button
+  that opens the project's release page. Nothing is downloaded or installed;
+  updating is still manual.
+
+- **Help → Check for updates at startup**, off by default. When ticked, the
+  check runs in the background as the viewer opens, and a newer release
+  shows as a button in the status bar rather than a dialog over the session.
+
+  These are the viewer's only connections other than to a VNC server, and
+  they are made only when asked for: a check sends GitHub your IP address
+  and the viewer's version, with no account or token. Release notes are
+  shown as plain text, the page opened is always this project's own, and a
+  check gives up after 10 seconds or 1MB.
+
+## [0.16.1] - 2026-10-23
+
+Everything in this release was contributed by @Jhacarreiro (#28, #29, #31,
+#32).
+
+### Fixed
+
+- **A server can no longer flood one update with desktop resizes.** One
+  framebuffer update could carry 65,535 DesktopSize rectangles, each
+  reallocating the framebuffer and queuing a UI callback, even when every
+  size was within the limits. A second DesktopSize in the same update now
+  ends the session before anything is allocated.
+
+- **A server that stalls the handshake is disconnected after 30 seconds.**
+  A peer that accepted the TCP connection but never finished negotiating -
+  sending nothing, stopping partway, or trickling a byte at a time - held
+  the connection open indefinitely. Negotiation now has a 30-second total
+  budget; once connected, an idle session stays up exactly as before.
+
+### Security
+
+- **CI actions are pinned to full commit SHAs**, including in the release
+  job that can publish, so a moved tag cannot change what runs.
+
+- **The Windows build installs only hash-verified wheels.** Every package
+  the executable is built from, build tools included, is locked to a
+  SHA-256 in `requirements-build-windows.txt`. The build also starts the
+  finished executable before uploading it, so one with unloadable Qt
+  libraries fails CI.
+
 ## [0.16.0] - 2026-10-17
 
 ### Added
@@ -689,7 +740,9 @@ First public release.
 - The remote view read its client attribute during `__init__`, before it was
   assigned, because Qt dispatches an event from `setMouseTracking`.
 
-[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/riazhassan-za/openvncviewer/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.16.1...v0.17.0
+[0.16.1]: https://github.com/riazhassan-za/openvncviewer/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/riazhassan-za/openvncviewer/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/riazhassan-za/openvncviewer/compare/v0.14.1...v0.15.0

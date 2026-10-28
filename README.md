@@ -131,6 +131,22 @@ python -m venv .venv
 
 ## Run
 
+### Checking for updates
+
+Choose **Help → Check for updates…** to check GitHub for a newer stable release.
+The notice shows the available version and release notes; **Open release page**
+opens the project's official release page in your browser. Updates are installed
+manually from that page.
+
+**Help → Check for updates at startup** enables a background check each time
+the viewer opens. It is off by default and remembered with the interface
+preferences. A newer release adds a button to the status bar, so the startup
+check never opens a dialog over an active VNC session. Offline/rate-limit errors
+are quiet during startup; a manual check explains the failure and can be retried.
+Checks use GitHub's public API without an account or VNC credentials.
+
+### Starting the viewer
+
 ```
 .venv\Scripts\python.exe -m openvncviewer
 .venv\Scripts\python.exe -m openvncviewer --host mac.local --user myaccount
@@ -528,6 +544,7 @@ per-run Python loop rather than per-pixel work. See [TODO.md](TODO.md) §4.
 | `src/openvncviewer/__main__.py` | Entry point and argument parsing |
 | `src/openvncviewer/rfb.py` | RFB protocol, ARD auth, decoders (no Qt) |
 | `src/openvncviewer/ui.py` | Qt window, scaling view, input translation |
+| `src/openvncviewer/updates.py` | Asynchronous stable-release discovery and version comparison |
 | `tests/test_protocol.py` | Fake macOS server: auth + every encoding path |
 | `tests/test_scaling.py` | Scaling geometry, pointer mapping, painting |
 | `packaging/openvncviewer.spec` | PyInstaller build definition |
@@ -586,7 +603,9 @@ Send Bitcoin:
 
 The same address appears under **Help → About** in the viewer. There is no
 paid tier, no telemetry and nothing withheld — the executable on the releases
-page is the whole program.
+page is the whole program. The only connection it makes other than to your VNC
+server is the [update check](#checking-for-updates), and only when you ask for
+it.
 
 ## Contributing
 

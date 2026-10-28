@@ -24,6 +24,7 @@ import os
 import socket
 import struct
 import threading
+import time
 import zlib
 
 from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
@@ -76,6 +77,10 @@ MAX_FAILURE_REASON_BYTES = 8 * 1024
 # below this even uncompressed; the cap exists so a declared length cannot be
 # used to stall or exhaust before decompression limits apply.
 MAX_COMPRESSED_BYTES = 64 * 1024 * 1024
+
+# A total budget after TCP connects, including peers that send a byte just
+# often enough to avoid an ordinary socket inactivity timeout.
+HANDSHAKE_TIMEOUT = 30
 
 # Diffie-Hellman limits for ARD authentication. macOS Screen Sharing offers a
 # 4096-bit group with generator 5; the floor is well below that because older
@@ -255,6 +260,7 @@ class RFBClient:
 
         self._sock = None
         self._reader = None
+        self._handshake_deadline = None
         self._send_lock = threading.Lock()
         self._zrle = zlib.decompressobj()
         # Tight keeps four zlib streams, each reset when the server says so.
@@ -314,6 +320,21 @@ class RFBClient:
     # ------------------------------------------------------------------- io
 
     def _read(self, count):
+        if getattr(self, "_handshake_deadline", None) is not None:
+            data = bytearray()
+            while len(data) < count:
+                self._sock.settimeout(self._handshake_time_left())
+                try:
+                    # read() can perform several socket reads, each restarting
+                    # its timeout. read1() lets us check the total deadline
+                    # between chunks, including a deliberately trickled field.
+                    chunk = self._reader.read1(count - len(data))
+                except TimeoutError as exc:
+                    raise RFBError("VNC handshake timed out") from exc
+                if not chunk:
+                    raise RFBError("connection closed by server")
+                data.extend(chunk)
+            return bytes(data)
         data = self._reader.read(count)
         if data is None or len(data) < count:
             raise RFBError("connection closed by server")
@@ -322,13 +343,21 @@ class RFBClient:
     def _send(self, data):
         with self._send_lock:
             if self._sock is not None:
+                if self._handshake_deadline is not None:
+                    self._sock.settimeout(self._handshake_time_left())
                 self._sock.sendall(data)
+
+    def _handshake_time_left(self):
+        remaining = self._handshake_deadline - time.monotonic()
+        if remaining <= 0:
+            raise RFBError("VNC handshake timed out")
+        return remaining
 
     # ------------------------------------------------------------- handshake
 
     def _connect(self):
         self._sock = socket.create_connection((self.host, self.port), timeout=15)
-        self._sock.settimeout(None)
+        self._handshake_deadline = time.monotonic() + HANDSHAKE_TIMEOUT
         self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         enable_keepalive(self._sock)
         self._reader = self._sock.makefile("rb")
@@ -355,6 +384,8 @@ class RFBClient:
 
         self._set_pixel_format()
         self._set_encodings()
+        self._sock.settimeout(None)
+        self._handshake_deadline = None
         # Only now may input be sent: anything written before this point would
         # be spliced into the handshake and the server would drop us.
         self._ready = True
@@ -563,6 +594,11 @@ class RFBClient:
             elif encoding == ENC_TIGHT and self.jpeg_quality is not None:
                 self._decode_tight(x, y, w, h)
             elif encoding == ENC_DESKTOP_SIZE:
+                # One update describes one desktop transition. Bound both the
+                # allocations and the queued UI callbacks, even when every
+                # individual size is within the framebuffer limits.
+                if resized:
+                    raise RFBError("multiple DesktopSize rectangles in one update")
                 self._resize(w, h)
                 resized = True
                 continue
